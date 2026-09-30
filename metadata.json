@@ -1,6 +1,6 @@
 {
-  "name": "이퀼리브리엄 호: 평균의 바다1",
-  "description": "초등학생들이 평균의 개념을 배울 수 있는 인터랙티브 교육용 앱입니다. 화물선의 균형을 맞추는 과정을 통해 평균의 원리를 이해합니다.",
+  "name": "평균 탐구: 균형점 모델과 막대 모델",
+  "description": "초등학생이 균형점 그림(저울)과 막대 그림을 오가며 평균을 스스로 발견하는 AI 통합 학습 앱입니다. 활동 1에서 균형점 모델 예제를 풀고, 활동 2에서 두 모델을 연결하는 서술형 문항에 답하면 AI가 분석해 시각 힌트를 줍니다.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
