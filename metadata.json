@@ -1,0 +1,8 @@
+{
+  "name": "이퀼리브리엄 호: 평균의 바다1",
+  "description": "초등학생들이 평균의 개념을 배울 수 있는 인터랙티브 교육용 앱입니다. 화물선의 균형을 맞추는 과정을 통해 평균의 원리를 이해합니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
