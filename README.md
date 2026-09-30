@@ -14,7 +14,7 @@
 
 ```bash
 npm install
-cp .env.example .env.local   # GEMINI_API_KEY 등 입력 (없어도 실행됨)
+cp .env.example .env.local   # ANTHROPIC_API_KEY 등 입력 (없어도 실행됨)
 npm run dev                  # http://localhost:3000
 ```
 
@@ -25,14 +25,15 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-Google AI Studio에 올릴 때는 이 저장소 파일을 그대로 쓰면 됩니다(`server.ts`가 서버 쪽 Gemini 호출을 담당).
+AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리합니다. API 키는 서버에만 있고 학생 브라우저로 나가지 않습니다.
 
 ### 환경 변수
 
 | 이름 | 설명 |
 | --- | --- |
-| `GEMINI_API_KEY` | 서버에서만 쓰는 Gemini 키. 없으면 **규칙 기반 채점**으로 자동 전환되어 그대로 동작합니다. |
-| `GEMINI_MODEL` | (선택) 쓸 모델 목록, 쉼표로 구분. 앞에서부터 시도합니다. 기본값: `gemini-3.1-flash-lite,gemini-3.8-flash` |
+| `ANTHROPIC_API_KEY` | 서버에서만 쓰는 Claude API 키([console.anthropic.com](https://console.anthropic.com)에서 발급 — Claude.ai 구독과는 별도). 없으면 **규칙 기반 채점**으로 자동 전환되어 그대로 동작합니다. |
+| `GRADER_CLAUDE_MODEL` | (선택) 쓸 Claude 모델. 기본값 `claude-opus-5-5`. |
+| `GRADER_CLAUDE_EFFORT` | (선택) 생각의 깊이 `low`/`medium`/`high`/`xhigh`/`max`. 기본값 `medium` (학생이 결과를 기다리므로 빠른 쪽). |
 | `VITE_TEACHER_PIN` | (선택) 교사용 대시보드(⚙️) PIN. 비워 두면 PIN 없이 열립니다. 학생이 우연히 여는 것을 막는 간단한 잠금이며 화면 코드에 포함되므로, 중요한 비밀번호는 쓰지 마세요. |
 | `VITE_GOOGLE_SHEETS_URL` | (선택) 활동 기록을 받을 Google Apps Script 웹 앱 URL. 대시보드에서도 입력할 수 있습니다. |
 
@@ -76,7 +77,7 @@ Google AI Studio에 올릴 때는 이 저장소 파일을 그대로 쓰면 됩�
 
 ### AI 평가 → 학생에게는 아이콘 + 시각 힌트만
 
-서버(`/api/evaluate-answer`)가 문항별 **핵심 아이디어**가 답에 들어 있는지 판단합니다(Gemini, 키가 없거나 실패하면 규칙 채점).
+서버(`/api/evaluate-answer`)가 문항별 **핵심 아이디어**가 답에 들어 있는지 판단합니다(Claude, 키가 없거나 호출이 실패·거절되면 규칙 채점).
 
 - 학생 화면: ⭐ 통과 · 반쪽 별 부분 · 🔍 다시 — 그리고 **빠진 아이디어에 맞는 시각 힌트가 그림 위에서 자동 재생**(💡 버튼으로 다시 보기).
 - 교사 화면: 학생 답, 판정, AI의 글 진단(이해한 점·빠진 점·오개념·지도 제안).
