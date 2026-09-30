@@ -1,20 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { ArrowRight, Flag, Lightbulb, Play, RotateCcw, Scale, Star, Trophy } from 'lucide-react';
+import { ArrowRight, Flag, Lightbulb, Play, RotateCcw, Scale, SkipForward, Star, Trophy } from 'lucide-react';
 import { BalanceBeamStage } from '../components/BalanceBeamStage';
 import { AddLog, AppState, Block, DragLog, SolvedProblem, TeacherNote } from '../types';
 import { generateNewBlocks } from '../lib/levelGen';
-
-interface AIAnalysisResult {
-  teacherLog: string;
-  reasoningForNextStep: string;
-  activateVisualHint: boolean;
-  blocksToAdd: number;
-  forceInteger: boolean;
-}
+import { analyzeActivity1 } from '../lib/activity1Rules';
 
 interface Activity1Props {
-  playerName: string;
+  teacherMode: boolean;
   addLog: AddLog;
   onTeacherNote: (note: Omit<TeacherNote, 'id' | 'timestamp' | 'playerName'>) => void;
   onSolved: (problem: SolvedProblem) => void;
@@ -23,7 +16,7 @@ interface Activity1Props {
 
 const MAX_LEVEL = 10;
 
-export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoActivity2 }: Activity1Props) {
+export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onGoActivity2 }: Activity1Props) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [fulcrumPosition, setFulcrumPosition] = useState(5.5);
   const [appState, setAppState] = useState<AppState>('LOBBY');
@@ -35,7 +28,6 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
   // 단계마다 오답 수를 세어 2회부터 시각 힌트를 연다 (학생에게 글로 알려주지 않음)
   const [levelFailCount, setLevelFailCount] = useState(0);
   const [levelAttempts, setLevelAttempts] = useState(1);
-  const [isAIAnalyzing, setIsAIAnalyzing] = useState(false);
   const [currentLevelLogs, setCurrentLevelLogs] = useState<DragLog[]>([]);
 
   const currentDragStartRef = useRef<number>(0);
@@ -45,7 +37,8 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
   const log: AddLog = (action, details = '', extra) =>
     addLog(action, details, { activity: 'A1', level, failCount: levelFailCount, ...extra });
 
-  const hintLevel: 0 | 1 | 2 = levelFailCount >= 3 ? 2 : levelFailCount >= 2 ? 1 : 0;
+  // 교사 미리보기에서는 힌트를 처음부터 모두 볼 수 있다
+  const hintLevel: 0 | 1 | 2 = teacherMode || levelFailCount >= 3 ? 2 : levelFailCount >= 2 ? 1 : 0;
 
   const average = useMemo(() => {
     if (blocks.length === 0) return 0;
@@ -79,40 +72,7 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
     log('DRAG_FULCRUM', `Fulcrum moved ${startPos} -> ${finalPos} (${(duration / 1000).toFixed(1)}s)`);
   };
 
-  const fetchAIAnalysis = async (
-    isSuccess: boolean,
-    logs: DragLog[],
-    exploreSec: number,
-    failCountForApi: number
-  ): Promise<AIAnalysisResult | null> => {
-    try {
-      setIsAIAnalyzing(true);
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playerName: playerName || '학생',
-          level,
-          levelFailCount: failCountForApi,
-          isSuccess,
-          explorationTimeSec: exploreSec,
-          logs,
-          blocks: blocks.map((b) => ({ id: b.id, position: b.position, weight: b.weight })),
-          fulcrumPosition,
-          average,
-        }),
-      });
-      if (!res.ok) throw new Error(`API response status ${res.status}`);
-      return (await res.json()) as AIAnalysisResult;
-    } catch (err) {
-      console.error('AI Analysis failed:', err);
-      return null;
-    } finally {
-      setIsAIAnalyzing(false);
-    }
-  };
-
-  const handleConfirm = async () => {
+  const handleConfirm = () => {
     setAppState('EVALUATING');
     const isBalanced = Math.abs(average - fulcrumPosition) < 0.01;
     const explorationTime = Math.floor((Date.now() - levelStartTimeRef.current) / 1000);
@@ -125,27 +85,33 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
       { failCount: calculatedFailCount }
     );
 
-    const aiPromise = fetchAIAnalysis(isBalanced, currentLevelLogs, explorationTime, calculatedFailCount);
+    // 규칙으로 바로 진단한다 (AI를 기다리지 않음). 2초는 받침대가 빠지고 저울이 기우는 모습을 보여 주는 시간.
+    const analysis = analyzeActivity1({
+      level,
+      failCount: calculatedFailCount,
+      isSuccess: isBalanced,
+      explorationSec: explorationTime,
+      logs: currentLevelLogs,
+      positions: blocks.map((b) => b.position),
+      fulcrum: fulcrumPosition,
+      average,
+    });
+    onTeacherNote({
+      activity: 'A1',
+      title: `활동 1 · ${level}단계 ${isBalanced ? '성공' : `오답 ${calculatedFailCount}회`} (받침점 ${fulcrumPosition}, 평균 ${average})`,
+      body: `${analysis.teacherLog}${isBalanced ? `\n[다음 단계] ${analysis.reasoningForNextStep}` : ''}`,
+    });
 
-    setTimeout(async () => {
-      const aiResult = await aiPromise;
-      if (aiResult) {
-        onTeacherNote({
-          activity: 'A1',
-          title: `활동 1 · ${level}단계 ${isBalanced ? '성공' : `오답 ${calculatedFailCount}회`} (받침점 ${fulcrumPosition}, 평균 ${average})`,
-          body: `${aiResult.teacherLog}${isBalanced ? `\n[다음 단계 조정] ${aiResult.reasoningForNextStep}` : ''}`,
-        });
-      }
-
+    setTimeout(() => {
       if (!isBalanced) {
         setAppState('GAME_OVER');
         log('GAME_OVER', `Level ${level} failed (Fail count: ${calculatedFailCount})`, {
           failCount: calculatedFailCount,
-          teacherLog: aiResult?.teacherLog,
-          reasoning: aiResult?.reasoningForNextStep,
+          teacherLog: analysis.teacherLog,
+          reasoning: analysis.reasoningForNextStep,
         });
         // 2회 이상 틀리면 시각 힌트(거리 곡선), 3회 이상이면 거리의 합 막대까지 켠다
-        if (calculatedFailCount >= 2 || aiResult?.activateVisualHint) {
+        if (analysis.showVisualHint) {
           setIsHintActive(true);
           log('VISUAL_HINT_ON', `hint level ${calculatedFailCount >= 3 ? 2 : 1}`, {
             failCount: calculatedFailCount,
@@ -163,15 +129,10 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
           solvedAt: new Date().toISOString(),
         });
         log('LEVEL_CLEAR', `Level ${level} cleared on attempt ${levelAttempts}`, {
-          teacherLog: aiResult?.teacherLog,
-          reasoning: aiResult?.reasoningForNextStep,
+          teacherLog: analysis.teacherLog,
+          reasoning: analysis.reasoningForNextStep,
         });
-        if (aiResult) {
-          nextLevelParamsRef.current = {
-            blocksToAdd: aiResult.blocksToAdd || 1,
-            forceInteger: aiResult.forceInteger ?? true,
-          };
-        }
+        nextLevelParamsRef.current = { blocksToAdd: analysis.blocksToAdd, forceInteger: analysis.forceInteger };
       }
     }, 2000);
   };
@@ -297,7 +258,7 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
                   <Lightbulb size={26} className={isHintActive ? 'text-amber-500 fill-amber-300' : 'text-slate-400'} />
                 </button>
               )}
-              <button onClick={handleConfirm} disabled={isAIAnalyzing} className={`${bigButton} bg-sky-600 hover:bg-sky-700 shadow-sky-200`}>
+              <button onClick={handleConfirm} className={`${bigButton} bg-sky-600 hover:bg-sky-700 shadow-sky-200`}>
                 <span className="flex items-center gap-3">
                   <Scale size={24} />
                   확인
@@ -320,6 +281,18 @@ export function Activity1({ playerName, addLog, onTeacherNote, onSolved, onGoAct
                 {level >= MAX_LEVEL ? '완료' : '다음'}
               </span>
               <span className="absolute inset-0 rounded-full ring-4 ring-emerald-500/25 animate-pulse pointer-events-none" />
+            </button>
+          )}
+
+          {teacherMode && (appState === 'PLAYING' || appState === 'GAME_OVER') && (
+            <button
+              onClick={() => {
+                log('TEACHER_SKIP', `Level ${level} skipped`);
+                nextLevel();
+              }}
+              className="h-12 px-4 rounded-full bg-slate-800 text-white text-sm font-bold flex items-center gap-2 hover:bg-slate-700"
+            >
+              <SkipForward size={18} className="text-amber-300" /> 교사: 다음 단계
             </button>
           )}
 

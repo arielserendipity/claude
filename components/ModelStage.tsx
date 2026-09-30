@@ -60,8 +60,12 @@ interface ModelStageProps {
   editable: boolean;
   onValueChange?: (i: number, v: number) => void;
   onValueDragEnd?: (i: number, from: number, to: number) => void;
+  onAddValue?: (v: number) => void;
+  onRemoveValue?: (i: number) => void;
   hint: ActiveHint | null;
 }
+
+export const MAX_ITEMS = 10;
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
@@ -78,6 +82,8 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   editable,
   onValueChange,
   onValueDragEnd,
+  onAddValue,
+  onRemoveValue,
   hint,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -85,10 +91,13 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   const lastRef = useRef<number>(0);
   const movedRef = useRef(false);
 
-  const mean = useMemo(() => sum(values) / Math.max(1, values.length), [values]);
-  const left = useMemo(() => makeLayout(SIDE_LEFT, values), [values]);
-  const right = useMemo(() => makeLayout(SIDE_RIGHT, values), [values]);
-  const center = useMemo(() => makeLayout(MORPH_REGION, values), [values]);
+  const mean = useMemo(() => (values.length ? sum(values) / values.length : NaN), [values]);
+  // 새 자료 만들기: 막대 그림 끝에 '+' 자리를 하나 비워 둔다
+  const canAdd = editable && !!onAddValue && values.length < MAX_ITEMS;
+  const extra = canAdd ? 1 : 0;
+  const left = useMemo(() => makeLayout(SIDE_LEFT, values, extra), [values, extra]);
+  const right = useMemo(() => makeLayout(SIDE_RIGHT, values, extra), [values, extra]);
+  const center = useMemo(() => makeLayout(MORPH_REGION, values, extra), [values, extra]);
 
   const toSvg = (clientX: number, clientY: number): Pt | null => {
     const svg = svgRef.current;
@@ -161,7 +170,35 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     onSelect(selected === i ? null : i);
   };
 
-  const common = { values, p, mean, showCells, selected, hint, editable, select, startDrag };
+  // 빈 '+' 자리를 누른 높이에 막대를 새로 세운다
+  const addBarAt = (e: React.PointerEvent, L: Layout) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const pt = toSvg(e.clientX, e.clientY);
+    if (!pt || !onAddValue) return;
+    onAddValue(Math.max(1, Math.min(MAX_U, Math.round((L.O0.y - pt.y) / L.U0))));
+  };
+  const addWeight = (v: number) => onAddValue?.(v);
+  const removeItem = (i: number) => {
+    onRemoveValue?.(i);
+    onSelect(null);
+  };
+
+  const common = {
+    values,
+    p,
+    mean,
+    showCells,
+    selected,
+    hint,
+    editable,
+    canAdd,
+    select,
+    startDrag,
+    addBarAt,
+    addWeight,
+    removeItem,
+  };
 
   return (
     <svg
@@ -230,11 +267,31 @@ interface ModelViewProps {
   selected: number | null;
   hint: ActiveHint | null;
   editable: boolean;
+  canAdd: boolean;
   select: (i: number) => void;
   startDrag: (e: React.PointerEvent, kind: DragKind, L: Layout, index?: number) => void;
+  addBarAt: (e: React.PointerEvent, L: Layout) => void;
+  addWeight: (v: number) => void;
+  removeItem: (i: number) => void;
 }
 
-function ModelView({ L, t, values, p, mean, showCells, selected, hint, editable, select, startDrag }: ModelViewProps) {
+function ModelView({
+  L,
+  t,
+  values,
+  p,
+  mean,
+  showCells,
+  selected,
+  hint,
+  editable,
+  canAdd,
+  select,
+  startDrag,
+  addBarAt,
+  addWeight,
+  removeItem,
+}: ModelViewProps) {
   const { s, r1, r2 } = phases(t);
   const n = values.length;
   const g = L.barGap;
@@ -269,10 +326,11 @@ function ModelView({ L, t, values, p, mean, showCells, selected, hint, editable,
           { x: L.bx, y: lerp(L.rowTop, L.beamY, r2) },
           { x: L.bx + (MAX_U + 0.35) * L.U1, y: lerp(L.rowTop, L.beamY, r2) },
         ];
-  const baseline = localLine(L, t, 0, 0, n, { y0: L.beamY, y1: L.beamY });
+  const W = L.n; // 막대 그림 가로 칸 수 ('+' 자리 포함)
+  const baseline = localLine(L, t, 0, 0, W, { y0: L.beamY, y1: L.beamY });
 
-  const meanLine = localLine(L, t, p, -0.25, n + 0.25, { y0: pivot.y, y1: pivot.y });
-  const handle = localLabel(L, t, p, n + 0.25, { x: 26, y: 0 }, { x: 0, y: 26 });
+  const meanLine = localLine(L, t, p, -0.25, W + 0.25, { y0: pivot.y, y1: pivot.y });
+  const handle = localLabel(L, t, p, W + 0.25, { x: 26, y: 0 }, { x: 0, y: 26 });
 
   return (
     <g>
@@ -280,7 +338,7 @@ function ModelView({ L, t, values, p, mean, showCells, selected, hint, editable,
         {/* 눈금 격자 (막대 그림) */}
         {r2 < 1 &&
           Array.from({ length: MAX_U }, (_, k) => k + 1).map((u) => {
-            const [a, b] = localLine(L, t, u, 0, n, { y0: L.beamY, y1: L.beamY });
+            const [a, b] = localLine(L, t, u, 0, W, { y0: L.beamY, y1: L.beamY });
             return (
               <line key={`grid-${u}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#e2e8f0" strokeWidth={1.5} opacity={1 - r2} pointerEvents="none" />
             );
@@ -366,6 +424,19 @@ function ModelView({ L, t, values, p, mean, showCells, selected, hint, editable,
           );
         })}
 
+        {/* 새 자료: 막대 그림 끝의 '+' 자리 — 누른 높이에 막대가 생긴다 */}
+        {canAdd && atBar && (
+          <AddBarSlot L={L} slot={n} empty={n === 0} onPointerDown={(e) => addBarAt(e, L)} />
+        )}
+        {editable && atBar && !hk &&
+          values.map((_, i) => {
+            const pos = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 46 }, { x: -20, y: 5 });
+            return <DeleteButton key={`del-bar-${i}`} x={pos.x} y={pos.y} onClick={() => removeItem(i)} />;
+          })}
+
+        {/* 새 자료: 저울대 위 점선 추를 누르면 그 자리에 추가 놓인다 */}
+        {canAdd && atBalance && !hk && <GhostWeights L={L} values={values} onAdd={addWeight} />}
+
         {/* 추 */}
         {lateR > 0 &&
           values.map((v, i) => {
@@ -403,6 +474,17 @@ function ModelView({ L, t, values, p, mean, showCells, selected, hint, editable,
               </g>
             );
           })}
+
+        {editable && atBalance && !hk && selected != null && selected < values.length && (() => {
+          const wr = weightRect(L, selected, values[selected]);
+          return (
+            <DeleteButton
+              x={L.bx + wr.ub * L.U1 + 6}
+              y={wr.y0 - 6}
+              onClick={() => removeItem(selected)}
+            />
+          );
+        })()}
 
         {/* 평균선보다 넘친 칸(주황) / 모자란 칸(파랑) → 추와 받침점 사이 거리 */}
         {!leveling &&
@@ -676,7 +758,6 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
 // 함께 보기에서 두 그림의 같은 부분을 화살표로 잇기
 function Connectors({ left, right, values, p, hint }: { left: Layout; right: Layout; values: number[]; p: number; hint: ActiveHint | null }) {
   if (!hint) return null;
-  const n = values.length;
   const g = left.barGap;
   const f = left.barFrac;
   let A: Pt | null = null;
@@ -684,7 +765,7 @@ function Connectors({ left, right, values, p, hint }: { left: Layout; right: Lay
   let marker = 'mean';
   let color = MEAN.stroke;
   if (hint.key === 'MEAN_LINK') {
-    const h = P(frameAt(left, 0), p, n + 0.25);
+    const h = P(frameAt(left, 0), p, left.n + 0.25);
     A = { x: h.x + 26, y: h.y + 20 };
     B = { x: right.bx + p * right.U1 - 26, y: right.beamY + BEAM_HALF + 64 };
   } else if (hint.key === 'EXCESS_TO_DISTANCE' || hint.key === 'DEFICIT_TO_GAP') {
@@ -718,6 +799,75 @@ function Connectors({ left, right, values, p, hint }: { left: Layout; right: Lay
       <path d={d} fill="none" stroke="#ffffff" strokeWidth={9} strokeLinecap="round" opacity={0.8} />
       <path d={d} fill="none" stroke={color} strokeWidth={4} strokeLinecap="round" className="marching" markerEnd={`url(#arrow-${marker})`} />
       <circle cx={A.x} cy={A.y} r={6} fill={color} />
+    </g>
+  );
+}
+
+// 새 자료 만들기: 막대를 세울 빈 자리
+function AddBarSlot({ L, slot, empty, onPointerDown }: { L: Layout; slot: number; empty: boolean; onPointerDown: (e: React.PointerEvent) => void }) {
+  const x = L.O0.x + (slot + L.barGap) * L.S0;
+  const w = L.barFrac * L.S0;
+  const top = L.O0.y - MAX_U * L.U0;
+  const cy = L.O0.y - (MAX_U - 1) * L.U0; // '+'는 평균선과 겹치지 않게 위쪽에
+  return (
+    <g
+      className={empty ? 'soft-pulse' : 'ghost'}
+      style={{ cursor: 'copy' }}
+      onPointerDown={onPointerDown}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <rect x={x} y={top} width={w} height={MAX_U * L.U0} rx={8} fill="#eef2ff" fillOpacity={0.6} stroke="#818cf8" strokeWidth={2} strokeDasharray="7 6" />
+      <circle cx={x + w / 2} cy={cy} r={Math.min(18, w / 2 - 2)} fill="#6366f1" />
+      <path d={`M ${x + w / 2 - 8} ${cy} h 16 M ${x + w / 2} ${cy - 8} v 16`} stroke="#fff" strokeWidth={3.5} strokeLinecap="round" />
+    </g>
+  );
+}
+
+// 새 자료 만들기: 각 눈금 위의 점선 추 (누르면 그 자리에 추가 놓임)
+function GhostWeights({ L, values, onAdd }: { L: Layout; values: number[]; onAdd: (v: number) => void }) {
+  const counts = new Map<number, number>();
+  values.forEach((v) => counts.set(v, (counts.get(v) ?? 0) + 1));
+  const base = L.beamY - BEAM_HALF;
+  return (
+    <g>
+      {Array.from({ length: MAX_U }, (_, k) => k + 1).map((u) => {
+        const k = counts.get(u) ?? 0;
+        const cx = L.bx + u * L.U1;
+        const y0 = base - (k + 1) * L.wH;
+        return (
+          <g
+            key={`ghost-${u}`}
+            className={values.length === 0 ? 'ghost soft-pulse' : 'ghost'}
+            style={{ cursor: 'copy' }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onAdd(u);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <rect x={cx - L.wW / 2} y={y0} width={L.wW} height={L.wH - 2} rx={5} fill="#eef2ff" stroke="#818cf8" strokeWidth={1.8} strokeDasharray="4 3" />
+            <path d={`M ${cx - 5} ${y0 + L.wH / 2 - 1} h 10 M ${cx} ${y0 + L.wH / 2 - 6} v 10`} stroke="#6366f1" strokeWidth={2.2} strokeLinecap="round" />
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+function DeleteButton({ x, y, onClick }: { x: number; y: number; onClick: () => void }) {
+  return (
+    <g
+      transform={`translate(${x},${y})`}
+      style={{ cursor: 'pointer' }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      <circle r={11} fill="#fff1f2" stroke="#fb7185" strokeWidth={2} />
+      <path d="M -4.5 -4.5 L 4.5 4.5 M 4.5 -4.5 L -4.5 4.5" stroke="#e11d48" strokeWidth={2.4} strokeLinecap="round" />
     </g>
   );
 }

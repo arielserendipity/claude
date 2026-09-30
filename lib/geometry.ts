@@ -62,8 +62,9 @@ export function stackIndices(values: number[]) {
   return { idx, maxStack };
 }
 
-export function makeLayout(region: Region, values: number[]): Layout {
-  const n = Math.max(1, values.length);
+// extraSlots: 새 자료 만들기에서 막대 그림 끝에 '+' 자리를 비워 둘 칸 수
+export function makeLayout(region: Region, values: number[], extraSlots = 0): Layout {
+  const n = Math.max(1, values.length + extraSlots);
   const { idx: stackIdx, maxStack } = stackIndices(values);
 
   // 막대 그림
@@ -283,6 +284,7 @@ export function innerIntegers(a: number, b: number) {
 
 // 저울이 기우는 각도. maxDeg는 저울대 끝이 바닥에 닿는 각도로 정한다.
 export function tiltDegrees(mean: number, p: number, maxDeg = 12) {
+  if (!Number.isFinite(mean)) return 0;
   const d = mean - p;
   if (Math.abs(d) < 1e-6) return 0;
   return Math.max(-maxDeg, Math.min(maxDeg, d * 6));
