@@ -216,7 +216,11 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
                       <ul className="list-disc pl-5 text-xs text-slate-500">
                         {q.ideas.map((i) => (
                           <li key={i.id}>
-                            {i.teacher} → 빠지면: {HINT_TEACHER_DESC[i.hint]}
+                            <span className="text-slate-700">꼭 쓸 것 “{i.student}”</span> — {i.teacher}
+                            <br />
+                            인정 예: {i.accept}
+                            <br />
+                            🔍 2회 뒤 힌트: {HINT_TEACHER_DESC[i.hint]}
                             {i.hintTarget != null ? ` (자료 ${i.hintTarget})` : ''}
                           </li>
                         ))}
