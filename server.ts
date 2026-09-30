@@ -12,6 +12,7 @@ import {
   QuestionId,
   hintsForMissing,
   isCopyOfPrompt,
+  isDontKnow,
   ruleEvaluate,
   verdictFrom,
 } from './lib/questions';
@@ -126,10 +127,12 @@ const fmt = (x: number) => String(parseFloat(x.toFixed(2)));
 const EVAL_SYSTEM = `당신은 초등학교 5학년 수학 '평균' 수업에서 학생의 서술형 답을 분석하는 평가 보조 교사입니다.
 분석 결과는 교사에게만 보이고, 학생에게는 글이 아닌 그림 힌트만 제공됩니다. 학생에게 하는 말은 쓰지 마세요.
 
-판단 방법:
-1. 각 핵심 아이디어가 학생 답에 뜻으로 들어 있으면 그 id를 foundIdeaIds에 넣으세요.
-   초등학생의 서툰 표현, 맞춤법 오류, 다른 낱말(예: 평균선 대신 '가로줄', 받침점 대신 '세모', 거리 대신 '떨어진 칸')도 뜻이 맞으면 인정합니다.
-   문항 문장을 그대로 옮겨 쓴 것, 뜻이 틀리거나 모호한 것은 인정하지 않습니다.
+판단 방법 (초등학생 답이므로 너그럽게 채점합니다):
+1. 각 핵심 아이디어의 뜻이 학생 답에 들어 있으면 그 id를 foundIdeaIds에 넣으세요.
+   - 서툰 표현, 맞춤법 오류, 짧은 답, 다른 낱말(예: 평균선 대신 '가로줄', 받침점 대신 '세모', 거리 대신 '떨어진 칸')도 핵심 뜻이 맞으면 인정합니다.
+   - 완전한 문장이 아니거나 일부만 정확해도 핵심을 가리키고 있으면 인정합니다. 판단이 애매하면 인정하는 쪽으로 정하세요.
+   - 각 아이디어의 "인정 예"를 참고하세요.
+   - 인정하지 않는 경우: 모른다는 답, 문항 문장을 그대로 옮겨 쓴 것, 핵심과 관계없는 답, 뜻이 틀린 답(예: 반대 쪽이나 다른 부분을 가리킴).
 2. misconception: 오개념이나 두 그림을 혼동한 부분이 보이면 한 문장으로 쓰고, 없으면 빈 문자열로 두세요.
 3. teacherLog: 교사용 진단 2~4문장 — 학생이 이해한 점, 빠진 점, 다음 지도 제안(어떤 그림 조작을 해 보게 하면 좋은지).
 
@@ -151,7 +154,7 @@ ${q.usesCustomData ? `- 학생이 지금 화면에서 둔 평균선(받침점) �
 [문항 ${q.label}] ${q.prompt}
 [예시 답안] ${q.modelAnswer}
 [핵심 아이디어]
-${q.ideas.map((i) => `- ${i.id}: ${i.teacher}`).join('\n')}
+${q.ideas.map((i) => `- ${i.id}: ${i.teacher}\n  (인정 예: ${i.accept})`).join('\n')}
 
 [학생 답안 (${attempt}번째 제출)]
 <answer>
@@ -174,7 +177,8 @@ app.post('/api/evaluate-answer', async (req, res) => {
   const pos = typeof p === 'number' && Number.isFinite(p) ? p : 5;
 
   const rule = ruleEvaluate(q, text);
-  if (!claude || isCopyOfPrompt(q, text)) return res.json(rule);
+  // 키가 없거나, 문항을 옮겨 적었거나, '모르겠어요' 같은 답이면 AI를 부르지 않는다
+  if (!claude || isCopyOfPrompt(q, text) || isDontKnow(text)) return res.json(rule);
 
   const ideaIds = q.ideas.map((i) => i.id);
   // 목록 밖의 id가 하나 섞여도 분석 전체를 버리지 않도록 문자열로 받고 아래에서 걸러낸다

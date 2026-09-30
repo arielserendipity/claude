@@ -3,6 +3,8 @@ import confetti from 'canvas-confetti';
 import {
   ArrowLeftRight,
   ChartColumn,
+  Circle,
+  CircleCheck,
   Lightbulb,
   Lock,
   Play,
@@ -43,6 +45,7 @@ interface AnswerState {
   attempts: number;
   retries: number; // 🔍(핵심 내용이 하나도 없는 답) 받은 횟수 — 2회부터 시각 힌트
   cleared: boolean; // 반쪽 별 이상을 한 번이라도 받음 → 다음 문항이 열림
+  found: string[]; // 마지막 답에서 확인된 '꼭 쓸 것' (체크 표시)
 }
 
 type Answers = Record<QuestionId, AnswerState>;
@@ -51,7 +54,15 @@ type DataMode = 'default' | 'custom';
 const HINT_STEP_MS = 7000;
 const HINT_AFTER_RETRIES = 2;
 
-const emptyAnswer = (): AnswerState => ({ text: '', status: 'idle', hints: [], attempts: 0, retries: 0, cleared: false });
+const emptyAnswer = (): AnswerState => ({
+  text: '',
+  status: 'idle',
+  hints: [],
+  attempts: 0,
+  retries: 0,
+  cleared: false,
+  found: [],
+});
 
 function loadAnswers(key: string): Answers {
   const stored = loadStored<Partial<Record<QuestionId, Partial<AnswerState>>>>(key, {});
@@ -273,7 +284,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
     const retries = prev.retries + (result.verdict === 'RETRY' ? 1 : 0);
     const cleared = prev.cleared || result.verdict !== 'RETRY';
     const hintsOpen = retries >= HINT_AFTER_RETRIES;
-    setAnswer(q.id, { status: result.verdict, hints: result.hints, attempts: attempt, retries, cleared });
+    setAnswer(q.id, { status: result.verdict, hints: result.hints, attempts: attempt, retries, cleared, found: result.foundIdeaIds });
 
     addLog('SUBMIT_ANSWER', `found: [${result.foundIdeaIds.join(', ')}] missing: [${result.missingIdeaIds.join(', ')}] (${result.source})`, {
       activity: 'A2',
@@ -507,6 +518,25 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
               </button>
               {open && (
                 <div className="px-4 pb-4 flex flex-col gap-2">
+                  {/* 꼭 쓸 것: 제출하면 쓴 항목에 ✓ */}
+                  <div className="rounded-xl bg-indigo-50/70 border border-indigo-100 px-3 py-2">
+                    <div className="text-xs font-korean text-indigo-500 mb-1">꼭 쓸 것</div>
+                    <ul className="flex flex-col gap-1">
+                      {q.ideas.map((idea) => {
+                        const done = a.found.includes(idea.id);
+                        return (
+                          <li key={idea.id} className={`flex items-start gap-2 font-korean text-[15px] ${done ? 'text-emerald-700' : 'text-slate-700'}`}>
+                            {done ? (
+                              <CircleCheck size={18} className="shrink-0 mt-0.5 text-emerald-500" />
+                            ) : (
+                              <Circle size={18} className="shrink-0 mt-0.5 text-indigo-300" />
+                            )}
+                            {idea.student}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                   {q.usesCustomData && (
                     <span className="self-end flex items-center gap-1 text-xs text-slate-400 font-mono">
                       [{values.join(', ')}]

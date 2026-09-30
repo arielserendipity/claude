@@ -8,8 +8,10 @@ export type QuestionId = 'q1' | 'q2a' | 'q2b' | 'q3a' | 'q3b' | 'q4';
 
 export interface Idea {
   id: string;
+  student: string; // 학생에게 보이는 '꼭 쓸 것' (무엇에 대해 써야 하는지만, 답은 알려 주지 않음)
   teacher: string; // 교사용 채점 기준 설명
-  hint: HintKey; // 이 아이디어가 빠졌을 때 자동으로 보여줄 시각 힌트
+  accept: string; // 인정하는 표현 예 (AI 채점 안내용)
+  hint: HintKey; // 이 아이디어가 빠졌을 때 보여줄 시각 힌트
   hintTarget?: number; // 강조할 자료값
   // AI를 쓸 수 없을 때의 규칙 채점: 모든 그룹에서 하나 이상 일치하면 충족
   groups: string[][];
@@ -34,15 +36,19 @@ export const QUESTIONS: Question[] = [
     ideas: [
       {
         id: 'q1_bar',
+        student: '막대 그림에서는 무엇으로 나타나는지',
         teacher: '막대 그림: 평균 5 = 높이 5의 평균선(막대를 고르게 한 높이)',
+        accept: '평균선, 가로선, 초록 선, 5에 그은 줄, 막대를 똑같이 맞춘 높이 등',
         hint: 'MEAN_LINK',
-        groups: [['평균\\s*선', '가로\\s*(선|줄)', '선', '줄', '고르게', '평평', '같은\\s*높이', '높이']],
+        groups: [['선', '줄', '가로', '고르', '평평', '높이', '같게', '똑같', '5\\s*칸']],
       },
       {
         id: 'q1_balance',
+        student: '균형점 그림에서는 무엇으로 나타나는지',
         teacher: '균형점 그림: 평균 5 = 받침점의 위치(수평을 이루는 점)',
+        accept: '받침점, 받침대, 세모, 삼각형, 저울이 수평이 되는 곳, 균형이 맞는 점 등',
         hint: 'MEAN_LINK',
-        groups: [['받침', '수평', '균형', '기울지', '중심', '지지']],
+        groups: [['받침', '수평', '균형', '기울', '중심', '지지', '세모', '삼각', '가운데\\s*점']],
       },
     ],
   },
@@ -54,12 +60,14 @@ export const QUESTIONS: Question[] = [
     ideas: [
       {
         id: 'q2a_distance',
+        student: '균형점 그림의 어느 부분인지',
         teacher: '넘친 4칸 = 9의 추와 받침점 사이의 거리(오른쪽 4칸)',
+        accept: '9 추와 받침점 사이, 받침점에서 9까지 4칸, 5와 9 사이 간격, 9가 받침점에서 떨어진 만큼 등',
         hint: 'EXCESS_TO_DISTANCE',
         hintTarget: 9,
         groups: [
-          ['거리', '사이', '떨어', '간격', '칸', '만큼'],
-          ['받침', '5', '균형점', '중심'],
+          ['거리', '사이', '떨어', '간격', '칸', '만큼', '까지'],
+          ['받침', '5', '균형점', '중심', '세모', '삼각', '추', '9'],
         ],
       },
     ],
@@ -72,12 +80,14 @@ export const QUESTIONS: Question[] = [
     ideas: [
       {
         id: 'q2b_gap',
+        student: '막대 그림의 어느 부분인지',
         teacher: '받침점까지의 3칸 = 2인 막대 위에서 평균선까지 모자란(빈) 3칸',
+        accept: '2 막대 위의 빈 칸, 평균선까지 모자란 부분, 2에서 5까지 채워야 하는 3칸, 막대가 5에 못 미치는 만큼 등',
         hint: 'DEFICIT_TO_GAP',
         hintTarget: 2,
         groups: [
-          ['모자', '부족', '빈', '비어', '비는', '채우', '채워', '없는', '더\\s*있어야', '올라가', '필요'],
-          ['평균\\s*선', '선', '5', '위', '평균'],
+          ['모자', '부족', '빈', '비어', '비는', '채우', '채워', '없는', '더', '올라', '필요', '못\\s*미', '까지'],
+          ['평균', '선', '5', '위', '막대', '2'],
         ],
       },
     ],
@@ -92,22 +102,25 @@ export const QUESTIONS: Question[] = [
     ideas: [
       {
         id: 'q3a_expr',
+        student: '균형점 그림에서 어떻게 나타나는지',
         teacher: '표현: 받침점 왼쪽 거리의 합 = 오른쪽 거리의 합 (그래서 수평)',
+        accept: '왼쪽 거리와 오른쪽 거리가 같다, 양쪽 추까지 떨어진 칸을 모두 더하면 같다, 그래서 저울이 수평이다 등 ("합"이라는 말이 없어도 양쪽 거리가 같다는 뜻이면 인정)',
         hint: 'SUM_BALANCE',
         groups: [
-          ['거리', '떨어', '간격'],
+          ['거리', '떨어', '간격', '칸', '추'],
           ['합', '더하', '더한', '더해', '모두', '전체', '총', '왼쪽', '오른쪽', '양쪽', '양\\s*쪽'],
-          ['같', '똑같', '균형', '수평', '평평'],
+          ['같', '똑같', '균형', '수평', '평평', '맞'],
         ],
       },
       {
         id: 'q3a_why',
+        student: '왜 같은 관계인지 (까닭)',
         teacher: '이유: 막대의 넘친/모자란 칸 수 = 그 추와 받침점 사이의 거리',
+        accept: '넘친 칸이 곧 거리라서, 모자란 칸과 추까지의 거리가 같아서, 막대가 5에서 벗어난 만큼 추가 받침점에서 떨어져 있어서 등',
         hint: 'CELLS_TO_DISTANCE',
         groups: [
-          ['넘', '모자', '남', '부족', '차이', '칸'],
-          ['거리', '떨어'],
-          ['같', '곧', '바로', '만큼', '되', '므로', '때문', '니까'],
+          ['넘', '모자', '남', '부족', '차이', '칸', '벗어'],
+          ['거리', '떨어', '사이', '간격'],
         ],
       },
     ],
@@ -122,22 +135,25 @@ export const QUESTIONS: Question[] = [
     ideas: [
       {
         id: 'q3b_expr',
+        student: '막대 그림에서 어떻게 나타나는지',
         teacher: '표현: 평균선보다 넘친 칸의 합 = 모자란 칸의 합 (옮겨 채우면 고르게 됨)',
+        accept: '넘친 칸과 모자란 칸이 같다, 넘친 것을 옮기면 모자란 곳이 채워진다, 막대를 고르게 하면 모두 5가 된다 등',
         hint: 'LEVELING',
         groups: [
-          ['넘', '남', '많', '초과', '위로'],
-          ['모자', '부족', '빈', '비어', '적'],
-          ['같', '똑같', '채우', '채워', '고르', '평평', '옮기', '옮겨'],
+          ['넘', '남', '많', '초과', '위로', '높'],
+          ['모자', '부족', '빈', '비어', '적', '낮'],
+          ['같', '똑같', '채우', '채워', '고르', '평평', '옮기', '옮겨', '맞', '나눠', '나누'],
         ],
       },
       {
         id: 'q3b_why',
+        student: '왜 같은 관계인지 (까닭)',
         teacher: '이유: 추와 받침점 사이 거리 = 막대가 평균선에서 넘치거나 모자란 칸 수',
+        accept: '추까지의 거리가 넘치거나 모자란 칸 수와 같아서, 거리 1칸이 막대 1칸이라서 등',
         hint: 'CELLS_TO_DISTANCE',
         groups: [
-          ['거리', '떨어'],
-          ['칸', '넘', '모자', '남', '부족', '차이'],
-          ['같', '곧', '바로', '만큼', '되', '므로', '때문', '니까'],
+          ['거리', '떨어', '사이', '간격'],
+          ['칸', '넘', '모자', '남', '부족', '차이', '막대'],
         ],
       },
     ],
@@ -153,15 +169,19 @@ export const QUESTIONS: Question[] = [
     ideas: [
       {
         id: 'q4_always',
-        teacher: '일반화: 자료가 달라져도 평균에서는 항상 같은 관계가 성립함',
+        student: '새 자료에서도 같은 관계가 있는지',
+        teacher: '일반화: 자료가 달라져도 평균에서는 같은 관계가 성립함',
+        accept: '새 자료도 같았다, 항상 같다, 어떤 자료든 성립한다, 이번에도 수평이 되었다 등',
         hint: 'SUM_BALANCE',
-        groups: [['항상', '늘', '언제나', '모든', '어떤', '바꿔도', '바꾸어도', '달라도', '달라져도', '바뀌어도', '마다', '성립']],
+        groups: [['항상', '늘', '언제나', '모든', '어떤', '바꿔도', '바꾸어도', '달라도', '달라져도', '바뀌어도', '마다', '성립', '같', '똑같', '그대로', '역시', '수평', '균형']],
       },
       {
         id: 'q4_evidence',
+        student: '내가 만든 자료의 수 (예: 막대 높이, 추 위치, 평균)',
         teacher: '근거: 자신이 살펴본 자료의 값(수치)으로 확인',
+        accept: '자료의 값, 평균, 넘친·모자란 칸 수, 거리의 합 등 수를 하나라도 들어 설명',
         hint: 'LEVELING',
-        groups: [['\\d']],
+        groups: [['\\d', '하나', '둘', '셋', '넷', '다섯', '여섯', '일곱', '여덟', '아홉', '열']],
       },
     ],
   },
@@ -198,6 +218,12 @@ export function isCopyOfPrompt(q: Question, answer: string) {
   return a.length < 4 || p.includes(a);
 }
 
+// '모르겠어요', '몰라' 같은 짧은 답은 채점할 내용이 없는 것으로 본다
+export function isDontKnow(answer: string) {
+  const a = answer.replace(/\s+/g, '');
+  return a.length <= 15 && /(모르|몰라|몰루|몰랑|글쎄|잘\s*모|패스|pass|\?{2,})/i.test(a);
+}
+
 export function hintsForMissing(q: Question, missingIdeaIds: string[]): HintRef[] {
   const seen = new Set<string>();
   const out: HintRef[] = [];
@@ -219,7 +245,7 @@ export function verdictFrom(q: Question, found: string[]): Verdict {
 
 export function ruleEvaluate(q: Question, answer: string): EvalResult {
   const text = normalizeAnswer(answer);
-  const found = isCopyOfPrompt(q, answer)
+  const found = isCopyOfPrompt(q, answer) || isDontKnow(answer)
     ? []
     : q.ideas
         .filter((idea) => idea.groups.every((g) => g.some((pat) => new RegExp(pat).test(text))))
