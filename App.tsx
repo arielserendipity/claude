@@ -129,13 +129,16 @@ function App() {
               <UserRound size={16} /> {teacherMode ? '교사 미리보기' : name}
             </span>
           )}
-          <button
-            onClick={() => setShowTeacherPanel(true)}
-            className="p-2 rounded-full border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
-            aria-label="교사용"
-          >
-            <Settings size={18} />
-          </button>
+          {/* 교사용 대시보드(기록·로그)는 교사 코드를 이름으로 넣었을 때만 보인다 */}
+          {teacherMode && (
+            <button
+              onClick={() => setShowTeacherPanel(true)}
+              className="p-2 rounded-full border border-slate-200 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+              aria-label="교사용"
+            >
+              <Settings size={18} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -162,7 +165,7 @@ function App() {
         </div>
       )}
 
-      {showTeacherPanel && (
+      {teacherMode && showTeacherPanel && (
         <TeacherPanel
           onClose={() => setShowTeacherPanel(false)}
           notes={notes}
