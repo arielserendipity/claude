@@ -141,7 +141,6 @@ function App() {
         <div className={screen === 'ACTIVITY1' ? 'flex-1 min-h-0 flex' : 'hidden'}>
           <Activity1
             key={`a1-${name}`}
-            playerName={name}
             addLog={addLog}
             onTeacherNote={addTeacherNote}
             onSolved={addSolved}

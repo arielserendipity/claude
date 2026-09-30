@@ -34,6 +34,7 @@ app.use(express.json({ limit: '64kb' }));
 
 // ---------------------------------------------------------------------------
 // Claude (API 키는 서버에만 있고 브라우저로 나가지 않는다)
+// 활동 2 서술형 채점에만 쓴다. 활동 1은 기다림 없이 lib/activity1Rules.ts 규칙으로 바로 진단한다.
 // 키가 없거나, 호출이 실패하거나, 거절되면 lib/questions.ts 의 규칙 채점으로 대신한다.
 // ---------------------------------------------------------------------------
 type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -115,107 +116,6 @@ async function askClaude<S extends z.ZodType>(system: string, user: string, sche
     return null;
   }
 }
-
-interface DragLog {
-  action: 'DRAG_BLOCK' | 'DRAG_FULCRUM';
-  id?: string;
-  startPos: number;
-  endPos: number;
-  durationMs: number;
-}
-
-interface AnalyzeRequestBody {
-  playerName?: string;
-  level: number;
-  levelFailCount: number;
-  isSuccess: boolean;
-  explorationTimeSec: number;
-  logs: DragLog[];
-  blocks: { id: string; position: number; weight: number }[];
-  fulcrumPosition: number;
-  average: number;
-}
-
-// ---------------------------------------------------------------------------
-// 활동 1: 균형점 모델 예제 풀기 — 탐구 과정 진단 + 다음 단계 난이도 결정
-// (학생에게 보여줄 글 힌트는 만들지 않는다. 시각 힌트를 켤지만 정한다.)
-// ---------------------------------------------------------------------------
-const AnalyzeSchema = z.object({
-  teacherLog: z.string().describe('교사용 학생 탐구 패턴 및 개념 이해도 분석 (2~3문장)'),
-  reasoningForNextStep: z.string().describe('다음 단계 난이도를 정한 이유'),
-  activateVisualHint: z.boolean().describe('2회 이상 오답 시 거리 시각 힌트를 켤지 여부'),
-  blocksToAdd: z.number().int().describe('성공 시 다음 단계에 더할 추의 수 (1 또는 2)'),
-  forceInteger: z.boolean().describe('다음 단계 균형점이 자연수여야 하는지 여부'),
-});
-type AnalyzeResult = z.infer<typeof AnalyzeSchema>;
-
-const ANALYZE_SYSTEM = `당신은 초등학교 수학 '평균' 단원의 디지털 활동 '균형점 모델 예제 풀기'의 학습 진단 및 적응형 난이도 엔진입니다.
-결과는 교사에게만 보이며, 학생에게는 글 힌트를 주지 않습니다(그림 힌트만 사용).
-
-활동 규칙: 저울대(0~10) 위의 추는 움직일 수 없고, 학생은 받침점만 좌우로 옮겨 저울이 수평이 되는 곳(평균)을 찾습니다.
-
-요구사항:
-1. 시각 힌트: 누적 오답이 2회 이상이면 activateVisualHint를 true로 하세요 (화면에 추와 받침점 사이 거리 곡선이 켜지고, 3회 이상이면 왼쪽/오른쪽 거리의 합 막대도 켜짐). 1회 이하이면 false.
-2. 성공 시: 다음 단계 난이도(추 추가 수 blocksToAdd: 1~2개, 평균이 자연수일지 forceInteger)를 학생의 탐구 숙련도에 맞춰 정하고 그 이유를 reasoningForNextStep에 쓰세요.
-3. teacherLog: 걸린 시간, 받침점 조작 양상, 오차 방향을 바탕으로 학생이 평균(균형점) 개념에서 보이는 어려움이나 특징을 교육학적으로 2~3문장으로 요약하세요.`;
-
-app.post('/api/analyze', async (req, res) => {
-  const {
-    playerName = '학생',
-    level = 1,
-    levelFailCount = 0,
-    isSuccess = false,
-    explorationTimeSec = 0,
-    logs = [],
-    blocks = [],
-    fulcrumPosition = 5.5,
-    average = 5.5,
-  }: AnalyzeRequestBody = req.body;
-
-  const blockPositions = blocks.map((b) => b.position);
-  const sumOfPositions = blockPositions.reduce((a, b) => a + b, 0);
-  const countOfBlocks = blocks.length;
-
-  let logText = logs
-    .map((l) => {
-      if (l.action === 'DRAG_FULCRUM') {
-        return `받침점 위치 ${l.startPos} => ${l.endPos} (${(l.durationMs / 1000).toFixed(1)}초)`;
-      }
-      return '';
-    })
-    .filter(Boolean)
-    .join(', ');
-  if (!logText) logText = '(처음 위치에서 받침점 이동 없이 확인 버튼 클릭)';
-
-  const situation = `[상황 데이터]
-- 학생 이름: ${playerName}
-- 현재 단계: ${level}
-- 이번 단계 누적 오답 횟수: ${levelFailCount}회
-- 이번 시도 성공 여부: ${isSuccess ? '성공 (저울 수평)' : '실패 (기울어짐)'}
-- 탐구 및 조작 시간: ${explorationTimeSec}초
-- 저울대 위 추들의 위치: [${blockPositions.join(', ')}] (총 ${countOfBlocks}개, 위치 합: ${sumOfPositions})
-- 수학적 평균(균형점): ${average}
-- 학생이 둔 받침점: ${fulcrumPosition} (오차: ${Math.abs(fulcrumPosition - average).toFixed(1)})
-- 이번 단계 조작 과정: [${logText}]`;
-
-  const buildFallback = (): AnalyzeResult => ({
-    teacherLog: `[학습 진단] ${playerName} 학생은 ${explorationTimeSec}초간 탐구 후 받침점을 ${fulcrumPosition}에 둠(평균: ${average}). ${
-      isSuccess ? '균형을 맞춤' : `${levelFailCount}회차 오답 탐색 중 (${fulcrumPosition > average ? '오른쪽' : '왼쪽'}으로 치우침)`
-    }. 조작 로그: ${logText}`,
-    reasoningForNextStep: isSuccess
-      ? '현재 단계의 균형점 원리를 이해하였으므로 추를 더해 점진적으로 도전 과제를 부여합니다.'
-      : '같은 단계에서 추와 받침점 사이 거리 관계를 체득하도록 시각 힌트를 유지합니다.',
-    activateVisualHint: !isSuccess && levelFailCount >= 2,
-    blocksToAdd: isSuccess ? (explorationTimeSec < 10 ? 2 : 1) : 1,
-    forceInteger: true,
-  });
-
-  const parsed = await askClaude(ANALYZE_SYSTEM, situation, AnalyzeSchema);
-  if (!parsed) return res.json(buildFallback());
-  if (!isSuccess && levelFailCount >= 2) parsed.activateVisualHint = true;
-  parsed.blocksToAdd = Math.max(1, Math.min(2, Math.round(parsed.blocksToAdd || 1)));
-  return res.json(parsed);
-});
 
 // ---------------------------------------------------------------------------
 // 활동 2: 균형점 모델과 막대 모델 연결하기 — 서술형 답 분석

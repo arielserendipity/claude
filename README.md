@@ -25,7 +25,7 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리합니다. API 키는 서버에만 있고 학생 브라우저로 나가지 않습니다.
+활동 2의 서술형 채점은 `server.ts`가 서버에서 **Claude API**를 불러 처리합니다. API 키는 서버에만 있고 학생 브라우저로 나가지 않습니다. 활동 1은 학생이 기다리지 않도록 AI 없이 규칙으로 바로 진단합니다.
 
 ### 학생 태블릿으로 쓰기 (Render 무료 배포)
 
@@ -42,7 +42,7 @@ AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리
 5. **모든 학생 결과를 한곳에서 보기** (선택): 학생 기록은 각 태블릿에 따로 저장되므로, 한꺼번에 보려면 구글 시트를 연결합니다. 앱의 ⚙️ 교사용 대시보드에 있는 Apps Script 코드를 구글 시트([확장 프로그램] → [Apps Script])에 붙여넣고 웹 앱으로 배포한 뒤, 받은 URL을 Render의 **Environment** 화면에서 `VITE_GOOGLE_SHEETS_URL`에 넣고 **Manual Deploy**를 누릅니다. 그러면 모든 태블릿의 답안·AI 분석이 시트에 한 줄씩 쌓입니다.
 
 요금 관리:
-- Claude 호출은 기본으로 **분당 120회, 하루 1000회**까지만 하고, 넘으면 자동으로 규칙 채점으로 대신합니다(`GRADER_MAX_CALLS_PER_MINUTE`, `GRADER_MAX_CALLS_PER_DAY`로 조정).
+- Claude는 **활동 2 서술형 답을 제출할 때만** 부릅니다(활동 1은 호출 없음). 호출은 기본으로 **분당 120회, 하루 1000회**까지만 하고, 넘으면 자동으로 규칙 채점으로 대신합니다(`GRADER_MAX_CALLS_PER_MINUTE`, `GRADER_MAX_CALLS_PER_DAY`로 조정).
 - Anthropic Console의 사용 한도(Limits) 메뉴에서 **월 사용 한도**도 걸어 두기를 권합니다.
 - 키를 바꿀 때는 Render → 서비스 → **Environment**에서 `ANTHROPIC_API_KEY`만 고쳐 저장하면 됩니다.
 
@@ -61,7 +61,9 @@ AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리
 
 - 저울대(0~10) 위의 추는 고정되어 있고, 학생은 **받침점만** 끌어서 저울이 수평이 되는 곳을 찾습니다.
 - [확인] 전에는 받침대가 저울을 붙잡고 있어 기울지 않습니다. [확인]을 누르면 받침대가 빠지고 저울이 실제로 기웁니다(바닥에 닿을 때까지만).
-- 10단계. 단계를 통과하면 추가 1~2개씩 늘어나고, AI가 탐구 시간·조작 과정을 보고 다음 단계 난이도를 정합니다.
+- 10단계. 단계를 통과하면 추가 1~2개씩 늘어납니다. [확인]을 누르면 AI를 기다리지 않고 규칙([`lib/activity1Rules.ts`](lib/activity1Rules.ts))으로 바로 판단합니다.
+  - 난이도: 한 번에 20초 안에 풀면 추 2개, 아니면 1개를 더함. 5단계부터 한 번에 풀면 평균이 0.5 단위인 문제도 나옴.
+  - 교사용 진단: 탐구 시간, 받침점을 옮긴 횟수·방향 바꿈, 평균과의 차이, 그리고 자주 보이는 오개념(가장 왼쪽·오른쪽 추의 한가운데나 가운데 놓인 추를 균형점으로 생각함)을 기록.
 - **시각 힌트 (같은 단계에서 틀린 횟수에 따라)**
   - 2회: 각 추와 받침점 사이의 **거리 곡선**(왼쪽 파랑, 오른쪽 주황, 칸 수 표시)
   - 3회 이상: 여기에 **왼쪽 거리의 합 / 오른쪽 거리의 합 막대**까지 (받침점을 움직이면 실시간으로 바뀜)
@@ -116,7 +118,7 @@ AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리
 ## 교사용 대시보드 (⚙️)
 
 - 활동 구성(교사용 제목), 문항별 예시 답안·채점 기준·자동 힌트 표
-- **AI 분석 기록**: 학생별 제출 답안, 판정, AI 진단(활동 1의 단계별 탐구 진단 포함)
+- **분석 기록**: 활동 2 학생별 제출 답안·판정·AI 진단, 활동 1 단계별 규칙 진단
 - **Google 스프레드시트 연동**: 표시된 Apps Script 코드를 시트에 배포하고 URL을 넣으면 모든 활동 기록이 실시간으로 쌓입니다.
 - 활동 로그 CSV 내려받기, 이 기기 기록 지우기
 
@@ -126,7 +128,7 @@ AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리
 
 ```
 App.tsx                      첫 화면 ↔ 활동 1/2 전환, 기록(로그·시트·AI 분석) 관리
-activities/Activity1.tsx     활동 1: 단계 게임 흐름, AI 진단 호출
+activities/Activity1.tsx     활동 1: 단계 게임 흐름
 activities/Activity2.tsx     활동 2: 그림 도구, 서술형 문항, 시각 힌트 재생
 components/BalanceBeamStage.tsx  활동 1 저울 그림 (SVG, 터치 지원)
 components/ModelStage.tsx    활동 2 막대 그림·균형점 그림·변신·시각 힌트 (SVG, 터치 지원)
@@ -136,6 +138,7 @@ lib/questions.ts             문항·채점 기준·힌트 연결·규칙 채점
 lib/hints.ts                 시각 힌트 종류
 lib/geometry.ts              막대 그림 → 균형점 그림 변신 좌표 계산
 lib/levelGen.ts              활동 1 문제 생성
-server.ts                    Express 서버: /api/analyze(활동 1), /api/evaluate-answer(활동 2)
+lib/activity1Rules.ts        활동 1 규칙 진단·다음 단계 난이도
+server.ts                    Express 서버: /api/evaluate-answer(활동 2 서술형 채점, Claude)
 render.yaml                  Render 배포 설정 (학생 태블릿용 공개 주소)
 ```
