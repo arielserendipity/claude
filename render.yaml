@@ -1,0 +1,18 @@
+# Render 배포 설정 — Render 대시보드에서 [New] > [Blueprint]로 이 저장소를 고르면 아래대로 만들어진다.
+# sync: false 인 값(API 키, 교사 PIN 등)은 만들 때 화면에서 직접 입력한다. (저장소에는 넣지 않음)
+services:
+  - type: web
+    name: average-activity
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: NODE_ENV=production npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: VITE_TEACHER_PIN
+        sync: false
+      - key: VITE_GOOGLE_SHEETS_URL
+        sync: false

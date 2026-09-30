@@ -49,8 +49,34 @@ const CLAUDE_EFFORT: Effort = EFFORTS.includes(process.env.GRADER_CLAUDE_EFFORT 
 // 안전 분류기가 요청을 거절하면 서버에서 권장 모델로 다시 시도하게 한다 (이 옵션을 받는 모델에만 보냄)
 const DEFAULT_FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5']);
 
+// 공개 주소로 배포했을 때 요금이 과하게 나가지 않도록 Claude 호출 수를 제한한다.
+// 한도를 넘으면 오류 대신 규칙 채점으로 넘어가므로 수업은 그대로 진행된다.
+const MAX_CALLS_PER_MINUTE = Number(process.env.GRADER_MAX_CALLS_PER_MINUTE) || 120;
+const MAX_CALLS_PER_DAY = Number(process.env.GRADER_MAX_CALLS_PER_DAY) || 1000;
+const recentCalls: number[] = [];
+let callDay = '';
+let callsToday = 0;
+
+function takeCallBudget() {
+  const now = Date.now();
+  while (recentCalls.length && now - recentCalls[0] > 60_000) recentCalls.shift();
+  const today = new Date(now).toISOString().slice(0, 10);
+  if (today !== callDay) {
+    callDay = today;
+    callsToday = 0;
+  }
+  if (recentCalls.length >= MAX_CALLS_PER_MINUTE || callsToday >= MAX_CALLS_PER_DAY) return false;
+  recentCalls.push(now);
+  callsToday++;
+  return true;
+}
+
 async function askClaude<S extends z.ZodType>(system: string, user: string, schema: S): Promise<z.infer<S> | null> {
   if (!claude) return null;
+  if (!takeCallBudget()) {
+    console.warn(`Claude 호출 한도 도달 (분당 ${MAX_CALLS_PER_MINUTE}, 하루 ${MAX_CALLS_PER_DAY}) — 규칙 채점을 씁니다.`);
+    return null;
+  }
   const fallback = DEFAULT_FALLBACK_MODELS.has(CLAUDE_MODEL)
     ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const }
     : {};

@@ -27,6 +27,25 @@ NODE_ENV=production npm start
 
 AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리합니다. API 키는 서버에만 있고 학생 브라우저로 나가지 않습니다.
 
+### 학생 태블릿으로 쓰기 (Render 무료 배포)
+
+학생마다 자기 태블릿으로 들어오려면 인터넷 주소가 있는 서버에 올려야 합니다. 이 저장소에는 [Render](https://render.com) 설정 파일(`render.yaml`)이 들어 있어서 아래 순서만 따르면 됩니다.
+
+1. **코드 합치기**: GitHub의 PR 페이지에서 초록색 **Merge pull request** → **Confirm merge**를 누릅니다. (Render는 `main` 브랜치를 올립니다.)
+2. **Render 가입**: render.com에서 **GitHub 계정으로 가입**합니다.
+3. **배포 만들기**: 대시보드 **New** → **Blueprint** → 이 저장소를 고릅니다. 입력 칸이 나오면:
+   - `ANTHROPIC_API_KEY`: Claude API 키 (채팅이나 GitHub에는 절대 붙여 넣지 마세요)
+   - `VITE_TEACHER_PIN`: 교사용 대시보드 잠금 번호 (예: 네 자리 숫자) — 학생 태블릿에서 ⚙️를 눌러도 못 열게
+   - `VITE_GOOGLE_SHEETS_URL`: 비워 두어도 됩니다 (아래 5번)
+   - **Apply**를 누르고 3~5분 기다리면 `https://average-activity-xxxx.onrender.com` 같은 주소가 생깁니다.
+4. **학생에게 주소 알려 주기**: 칠판에 적거나 QR 코드로 나눠 줍니다. 무료 요금제는 15분 동안 아무도 안 쓰면 잠들어서 첫 접속에 1분쯤 걸리니, **수업 몇 분 전에 선생님이 먼저 한 번 열어** 두세요.
+5. **모든 학생 결과를 한곳에서 보기** (선택): 학생 기록은 각 태블릿에 따로 저장되므로, 한꺼번에 보려면 구글 시트를 연결합니다. 앱의 ⚙️ 교사용 대시보드에 있는 Apps Script 코드를 구글 시트([확장 프로그램] → [Apps Script])에 붙여넣고 웹 앱으로 배포한 뒤, 받은 URL을 Render의 **Environment** 화면에서 `VITE_GOOGLE_SHEETS_URL`에 넣고 **Manual Deploy**를 누릅니다. 그러면 모든 태블릿의 답안·AI 분석이 시트에 한 줄씩 쌓입니다.
+
+요금 관리:
+- Claude 호출은 기본으로 **분당 120회, 하루 1000회**까지만 하고, 넘으면 자동으로 규칙 채점으로 대신합니다(`GRADER_MAX_CALLS_PER_MINUTE`, `GRADER_MAX_CALLS_PER_DAY`로 조정).
+- Anthropic Console의 사용 한도(Limits) 메뉴에서 **월 사용 한도**도 걸어 두기를 권합니다.
+- 키를 바꿀 때는 Render → 서비스 → **Environment**에서 `ANTHROPIC_API_KEY`만 고쳐 저장하면 됩니다.
+
 ### 환경 변수
 
 | 이름 | 설명 |
@@ -34,6 +53,7 @@ AI 채점·진단은 `server.ts`가 서버에서 **Claude API**를 불러 처리
 | `ANTHROPIC_API_KEY` | 서버에서만 쓰는 Claude API 키([console.anthropic.com](https://console.anthropic.com)에서 발급 — Claude.ai 구독과는 별도). 없으면 **규칙 기반 채점**으로 자동 전환되어 그대로 동작합니다. |
 | `GRADER_CLAUDE_MODEL` | (선택) 쓸 Claude 모델. 기본값 `claude-opus-5-5`. |
 | `GRADER_CLAUDE_EFFORT` | (선택) 생각의 깊이 `low`/`medium`/`high`/`xhigh`/`max`. 기본값 `medium` (학생이 결과를 기다리므로 빠른 쪽). |
+| `GRADER_MAX_CALLS_PER_MINUTE` / `GRADER_MAX_CALLS_PER_DAY` | (선택) Claude 호출 상한. 기본 분당 120회 / 하루 1000회. 넘으면 규칙 채점으로 대신합니다. |
 | `VITE_TEACHER_PIN` | (선택) 교사용 대시보드(⚙️) PIN. 비워 두면 PIN 없이 열립니다. 학생이 우연히 여는 것을 막는 간단한 잠금이며 화면 코드에 포함되므로, 중요한 비밀번호는 쓰지 마세요. |
 | `VITE_GOOGLE_SHEETS_URL` | (선택) 활동 기록을 받을 Google Apps Script 웹 앱 URL. 대시보드에서도 입력할 수 있습니다. |
 
@@ -117,4 +137,5 @@ lib/hints.ts                 시각 힌트 종류
 lib/geometry.ts              막대 그림 → 균형점 그림 변신 좌표 계산
 lib/levelGen.ts              활동 1 문제 생성
 server.ts                    Express 서버: /api/analyze(활동 1), /api/evaluate-answer(활동 2)
+render.yaml                  Render 배포 설정 (학생 태블릿용 공개 주소)
 ```
