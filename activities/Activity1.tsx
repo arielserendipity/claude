@@ -1,12 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { ArrowRight, Flag, Lightbulb, Play, RotateCcw, Scale, Star, Trophy } from 'lucide-react';
+import { ArrowRight, Flag, Lightbulb, Play, RotateCcw, Scale, SkipForward, Star, Trophy } from 'lucide-react';
 import { BalanceBeamStage } from '../components/BalanceBeamStage';
 import { AddLog, AppState, Block, DragLog, SolvedProblem, TeacherNote } from '../types';
 import { generateNewBlocks } from '../lib/levelGen';
 import { analyzeActivity1 } from '../lib/activity1Rules';
 
 interface Activity1Props {
+  teacherMode: boolean;
   addLog: AddLog;
   onTeacherNote: (note: Omit<TeacherNote, 'id' | 'timestamp' | 'playerName'>) => void;
   onSolved: (problem: SolvedProblem) => void;
@@ -15,7 +16,7 @@ interface Activity1Props {
 
 const MAX_LEVEL = 10;
 
-export function Activity1({ addLog, onTeacherNote, onSolved, onGoActivity2 }: Activity1Props) {
+export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onGoActivity2 }: Activity1Props) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [fulcrumPosition, setFulcrumPosition] = useState(5.5);
   const [appState, setAppState] = useState<AppState>('LOBBY');
@@ -36,7 +37,8 @@ export function Activity1({ addLog, onTeacherNote, onSolved, onGoActivity2 }: Ac
   const log: AddLog = (action, details = '', extra) =>
     addLog(action, details, { activity: 'A1', level, failCount: levelFailCount, ...extra });
 
-  const hintLevel: 0 | 1 | 2 = levelFailCount >= 3 ? 2 : levelFailCount >= 2 ? 1 : 0;
+  // 교사 미리보기에서는 힌트를 처음부터 모두 볼 수 있다
+  const hintLevel: 0 | 1 | 2 = teacherMode || levelFailCount >= 3 ? 2 : levelFailCount >= 2 ? 1 : 0;
 
   const average = useMemo(() => {
     if (blocks.length === 0) return 0;
@@ -279,6 +281,18 @@ export function Activity1({ addLog, onTeacherNote, onSolved, onGoActivity2 }: Ac
                 {level >= MAX_LEVEL ? '완료' : '다음'}
               </span>
               <span className="absolute inset-0 rounded-full ring-4 ring-emerald-500/25 animate-pulse pointer-events-none" />
+            </button>
+          )}
+
+          {teacherMode && (appState === 'PLAYING' || appState === 'GAME_OVER') && (
+            <button
+              onClick={() => {
+                log('TEACHER_SKIP', `Level ${level} skipped`);
+                nextLevel();
+              }}
+              className="h-12 px-4 rounded-full bg-slate-800 text-white text-sm font-bold flex items-center gap-2 hover:bg-slate-700"
+            >
+              <SkipForward size={18} className="text-amber-300" /> 교사: 다음 단계
             </button>
           )}
 

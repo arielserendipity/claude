@@ -5,9 +5,7 @@ import {
   ChartColumn,
   Lightbulb,
   Lock,
-  Minus,
   Play,
-  Plus,
   Repeat,
   RotateCcw,
   Scale,
@@ -16,10 +14,20 @@ import {
   Sparkles,
   Star,
   StarHalf,
+  Trash2,
   X,
 } from 'lucide-react';
-import { ActiveHint, ModelStage, ViewMode } from '../components/ModelStage';
-import { DEFAULT_VALUES, EvalResult, QUESTIONS, Question, QuestionId, Verdict, ruleEvaluate } from '../lib/questions';
+import { ActiveHint, MAX_ITEMS, ModelStage, ViewMode } from '../components/ModelStage';
+import {
+  DEFAULT_VALUES,
+  EvalResult,
+  QUESTIONS,
+  Question,
+  QuestionId,
+  Verdict,
+  hintsForMissing,
+  ruleEvaluate,
+} from '../lib/questions';
 import type { HintRef } from '../lib/hints';
 import { AddLog, SolvedProblem, TeacherNote } from '../types';
 import { loadStored, saveStored } from '../lib/storage';
@@ -33,40 +41,52 @@ interface AnswerState {
   status: AnswerStatus;
   hints: HintRef[];
   attempts: number;
+  retries: number; // 🔍(핵심 내용이 하나도 없는 답) 받은 횟수 — 2회부터 시각 힌트
+  cleared: boolean; // 반쪽 별 이상을 한 번이라도 받음 → 다음 문항이 열림
 }
 
 type Answers = Record<QuestionId, AnswerState>;
-
-const emptyAnswers = (): Answers =>
-  Object.fromEntries(QUESTIONS.map((q) => [q.id, { text: '', status: 'idle', hints: [], attempts: 0 }])) as Answers;
+type DataMode = 'default' | 'custom';
 
 const HINT_STEP_MS = 7000;
-const MAX_ITEMS = 10;
-const MIN_ITEMS = 2;
+const HINT_AFTER_RETRIES = 2;
 
-const meanOf = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
-const sameValues = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+const emptyAnswer = (): AnswerState => ({ text: '', status: 'idle', hints: [], attempts: 0, retries: 0, cleared: false });
+
+function loadAnswers(key: string): Answers {
+  const stored = loadStored<Partial<Record<QuestionId, Partial<AnswerState>>>>(key, {});
+  return Object.fromEntries(
+    QUESTIONS.map((q) => {
+      const a = { ...emptyAnswer(), ...(stored[q.id] ?? {}) };
+      // 예전 저장본에는 cleared가 없으므로 판정으로 채운다
+      if (stored[q.id]?.cleared == null) a.cleared = a.status === 'PASS' || a.status === 'PARTIAL';
+      if (a.status === 'loading') a.status = 'idle';
+      return [q.id, a];
+    })
+  ) as Answers;
+}
+
+const meanOf = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 
 interface Activity2Props {
   playerName: string;
+  teacherMode: boolean;
   addLog: AddLog;
   onTeacherNote: (note: Omit<TeacherNote, 'id' | 'timestamp' | 'playerName'>) => void;
   solvedProblems: SolvedProblem[];
 }
 
-export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }: Activity2Props) {
+export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solvedProblems }: Activity2Props) {
   const storeKey = `avg_a2_${playerName}`;
-  const [answers, setAnswers] = useState<Answers>(() => ({ ...emptyAnswers(), ...loadStored<Partial<Answers>>(storeKey, {}) }));
-  useEffect(() => {
-    // 채점 중 상태는 저장하지 않는다 (새로고침 후 멈춰 보이지 않게)
-    const toSave = Object.fromEntries(
-      Object.entries(answers).map(([k, a]) => [k, a.status === 'loading' ? { ...a, status: 'idle' } : a])
-    );
-    saveStored(storeKey, toSave);
-  }, [answers, storeKey]);
+  const customKey = `avg_a2_custom_${playerName}`;
+  const [answers, setAnswers] = useState<Answers>(() => loadAnswers(storeKey));
+  useEffect(() => saveStored(storeKey, answers), [answers, storeKey]);
 
-  const [values, setValues] = useState<number[]>(DEFAULT_VALUES);
-  const [dataSource, setDataSource] = useState<string>('default');
+  const [dataMode, setDataMode] = useState<DataMode>('default');
+  const [customValues, setCustomValues] = useState<number[]>(() => loadStored<number[]>(customKey, []));
+  useEffect(() => saveStored(customKey, customValues), [customValues, customKey]);
+  const values = dataMode === 'custom' ? customValues : DEFAULT_VALUES;
+
   const [p, setP] = useState(5);
   const [view, setView] = useState<ViewMode>('side');
   const [morphT, setMorphT] = useState(0);
@@ -75,13 +95,17 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
   const [hintQueue, setHintQueue] = useState<ActiveHint[]>([]);
   const [usedMorph, setUsedMorph] = useState(false);
   const [openId, setOpenId] = useState<QuestionId>(() => {
-    const firstOpen = QUESTIONS.find((q) => (answers[q.id]?.attempts ?? 0) === 0);
+    const firstOpen = QUESTIONS.find((q) => !answers[q.id].cleared);
     return firstOpen?.id ?? 'q1';
   });
 
   const mean = useMemo(() => meanOf(values), [values]);
   const activeHint = hintQueue[0] ?? null;
-  const exploreUnlocked = answers.q3b.attempts > 0;
+
+  // 반쪽 별 이상을 받아야 다음 문항이 열린다 (교사 코드로 들어오면 모두 열림)
+  const isUnlocked = (idx: number) => teacherMode || idx === 0 || answers[QUESTIONS[idx - 1].id].cleared;
+  const q4Index = QUESTIONS.findIndex((q) => q.usesCustomData);
+  const exploring = openId === QUESTIONS[q4Index].id && isUnlocked(q4Index);
 
   // ---------- 변신(morph) 애니메이션 ----------
   const morphRaf = useRef<number | null>(null);
@@ -109,13 +133,12 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
   const hintNonce = useRef(1);
   const playHints = (hints: HintRef[], q: Question) => {
     if (hints.length === 0) return;
-    // 1~3번 문항 힌트는 기본 자료, 평균 위치에서 보여준다
-    if (!q.usesCustomData && !sameValues(values, DEFAULT_VALUES)) {
-      setValues(DEFAULT_VALUES);
-      setDataSource('default');
-      setP(meanOf(DEFAULT_VALUES));
-    } else {
-      setP(q.usesCustomData ? mean : meanOf(DEFAULT_VALUES));
+    // 1~3번 문항 힌트는 처음 자료, 평균 위치에서 보여준다
+    if (!q.usesCustomData) {
+      setDataMode('default');
+      setP(5);
+    } else if (Number.isFinite(mean)) {
+      setP(mean);
     }
     setSelected(null);
     setHintQueue(hints.map((h) => ({ ...h, nonce: hintNonce.current++ })));
@@ -166,49 +189,68 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
     addLog('MORPH_PLAY', to === 1 ? '막대 그림 → 균형점 그림' : '균형점 그림 → 막대 그림', { activity: 'A2' });
   };
 
-  const resetStage = () => {
+  // 그림을 깨끗한 처음 상태로 (힌트·칸 보기 끄기, 함께 보기, 평균선 5)
+  const cleanStage = () => {
     stopMorph();
-    setP(5);
+    setView('side');
     setMorphT(0);
+    setP(5);
     setSelected(null);
     setShowCells(false);
     clearHints();
+  };
+
+  const resetStage = () => {
+    cleanStage();
     addLog('RESET_STAGE', '', { activity: 'A2' });
   };
 
-  const loadData = (next: number[], source: string) => {
-    setValues(next);
-    setDataSource(source);
+  // 문항이 바뀔 때마다 힌트 없이 깨끗한 그림에서 시작한다
+  const openQuestion = (id: QuestionId) => {
+    if (id === openId) return;
+    setOpenId(id);
+    cleanStage();
+    if (!QUESTIONS.find((q) => q.id === id)?.usesCustomData) setDataMode('default');
+  };
+
+  // ---------- 4번: 처음 자료 / 새로운 자료 ----------
+  const chooseData = (mode: DataMode) => {
+    if (mode === dataMode) return;
+    setDataMode(mode);
     setSelected(null);
     clearHints();
-    addLog('DATA_CHANGE', `${source}: [${next.join(', ')}] (평균 ${fmt(meanOf(next))})`, { activity: 'A2' });
+    const next = mode === 'custom' ? customValues : DEFAULT_VALUES;
+    addLog('DATA_MODE', `${mode === 'custom' ? '새로운 자료' : '처음 자료'}: [${next.join(', ')}]`, { activity: 'A2' });
   };
 
-  const editValue = (i: number, v: number) => {
-    setValues((prev) => prev.map((x, k) => (k === i ? v : x)));
-    setDataSource('custom');
+  const changeCustom = (next: number[], action: string) => {
+    setCustomValues(next);
+    setSelected(null);
     clearHints();
+    addLog('DATA_CHANGE', `${action}: [${next.join(', ')}] (평균 ${Number.isFinite(meanOf(next)) ? fmt(meanOf(next)) : '-'})`, {
+      activity: 'A2',
+    });
   };
 
-  const addItem = () => {
-    if (values.length >= MAX_ITEMS) return;
-    loadData([...values, 5], 'custom');
+  const addValue = (v: number) => {
+    if (customValues.length >= MAX_ITEMS) return;
+    changeCustom([...customValues, v], `추가 ${v}`);
   };
-  const removeItem = () => {
-    if (values.length <= MIN_ITEMS) return;
-    loadData(values.slice(0, -1), 'custom');
+  const removeValue = (i: number) => changeCustom(customValues.filter((_, k) => k !== i), `삭제 #${i + 1}`);
+  const editValue = (i: number, v: number) => {
+    setCustomValues((prev) => prev.map((x, k) => (k === i ? v : x)));
+    clearHints();
   };
 
   // ---------- 서술형 제출 ----------
   const setAnswer = (id: QuestionId, patch: Partial<AnswerState>) =>
     setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
 
-  const isUnlocked = (idx: number) => idx === 0 || answers[QUESTIONS[idx - 1].id].attempts > 0;
-
   const submit = async (q: Question) => {
-    const text = answers[q.id].text.trim();
-    if (!text || answers[q.id].status === 'loading') return;
-    const attempt = answers[q.id].attempts + 1;
+    const prev = answers[q.id];
+    const text = prev.text.trim();
+    if (!text || prev.status === 'loading') return;
+    const attempt = prev.attempts + 1;
     setAnswer(q.id, { status: 'loading' });
     const ctxValues = q.usesCustomData ? values : DEFAULT_VALUES;
     const ctxP = q.usesCustomData ? p : 5;
@@ -228,18 +270,22 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
       result.teacherLog = `[서버 연결 실패 → 기기 내 규칙 채점] ${result.teacherLog}`;
     }
 
-    setAnswer(q.id, { status: result.verdict, hints: result.hints, attempts: attempt });
+    const retries = prev.retries + (result.verdict === 'RETRY' ? 1 : 0);
+    const cleared = prev.cleared || result.verdict !== 'RETRY';
+    const hintsOpen = retries >= HINT_AFTER_RETRIES;
+    setAnswer(q.id, { status: result.verdict, hints: result.hints, attempts: attempt, retries, cleared });
+
     addLog('SUBMIT_ANSWER', `found: [${result.foundIdeaIds.join(', ')}] missing: [${result.missingIdeaIds.join(', ')}] (${result.source})`, {
       activity: 'A2',
       questionId: q.id,
       answer: text,
       verdict: result.verdict,
       teacherLog: result.teacherLog,
-      hint: result.hints.map((h) => h.key).join(', '),
+      hint: hintsOpen ? result.hints.map((h) => h.key).join(', ') : '',
     });
     onTeacherNote({
       activity: 'A2',
-      title: `활동 2 · 문항 ${q.label} (${attempt}번째 제출)${q.usesCustomData ? ` · 자료 [${ctxValues.join(', ')}]` : ''}`,
+      title: `활동 2 · 문항 ${q.label} (${attempt}번째 제출, 🔍 ${retries}회)${q.usesCustomData ? ` · 자료 [${ctxValues.join(', ')}]` : ''}`,
       body: `${result.teacherLog}${result.misconception ? `\n[오개념 가능성] ${result.misconception}` : ''}`,
       verdict: result.verdict,
       answer: text,
@@ -247,16 +293,17 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
 
     if (result.verdict === 'PASS') {
       confetti({ particleCount: 70, spread: 60, origin: { x: 0.8, y: 0.4 } });
-    } else {
+      // 다 맞히면 다음 문항을 연다 (힌트 없이 깨끗한 그림으로)
+      const idx = QUESTIONS.findIndex((x) => x.id === q.id);
+      const next = QUESTIONS[idx + 1];
+      if (next && answers[next.id].attempts === 0) openQuestion(next.id);
+    } else if (hintsOpen) {
+      // 🔍를 두 번 이상 받은 뒤부터만 시각 힌트를 보여 준다
       playHints(result.hints, q);
-    }
-    const idx = QUESTIONS.findIndex((x) => x.id === q.id);
-    if (idx < QUESTIONS.length - 1 && answers[QUESTIONS[idx + 1].id].attempts === 0) {
-      setOpenId(QUESTIONS[idx + 1].id);
     }
   };
 
-  const importable = solvedProblems.filter((s) => s.values.length >= MIN_ITEMS && s.values.length <= MAX_ITEMS);
+  const importable = solvedProblems.filter((s) => s.values.length >= 2 && s.values.length <= MAX_ITEMS);
 
   const segBtn = (active: boolean) =>
     `flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-korean transition-all ${
@@ -301,47 +348,44 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
             <RotateCcw size={20} />
           </button>
 
-          {exploreUnlocked && (
-            <div className="flex items-center gap-1.5 flex-wrap ml-auto">
-              <Sparkles size={18} className="text-violet-500" />
-              <button
-                onClick={() => loadData(DEFAULT_VALUES, 'default')}
-                className={`px-3 py-1.5 rounded-full text-sm font-korean border ${
-                  dataSource === 'default' ? 'bg-violet-100 border-violet-300 text-violet-800' : 'bg-white border-slate-200 text-slate-600'
-                }`}
-              >
-                처음 자료
-              </button>
-              {importable.map((s) => (
-                <button
-                  key={`${s.level}-${s.solvedAt}`}
-                  onClick={() => loadData(s.values, `a1-${s.level}`)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-korean border flex items-center gap-1 ${
-                    dataSource === `a1-${s.level}` ? 'bg-sky-100 border-sky-300 text-sky-800' : 'bg-white border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <Scale size={14} /> 활동 1 · {s.level}
-                </button>
-              ))}
-              <button
-                onClick={removeItem}
-                disabled={values.length <= MIN_ITEMS}
-                aria-label="자료 빼기"
-                className="w-9 h-9 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 disabled:opacity-40"
-              >
-                <Minus size={16} />
+          {/* 4번 문항: 처음 자료 / 새로운 자료 */}
+          {exploring && (
+            <div className="flex bg-violet-50 border border-violet-200 rounded-2xl p-1 ml-auto">
+              <button className={segBtn(dataMode === 'default')} onClick={() => chooseData('default')}>
+                <ChartColumn size={16} /> 처음 자료
               </button>
               <button
-                onClick={addItem}
-                disabled={values.length >= MAX_ITEMS}
-                aria-label="자료 더하기"
-                className="w-9 h-9 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-600 disabled:opacity-40"
+                className={`${segBtn(dataMode === 'custom')} ${dataMode !== 'custom' && customValues.length === 0 ? 'attention' : ''}`}
+                onClick={() => chooseData('custom')}
               >
-                <Plus size={16} />
+                <Sparkles size={16} /> 새로운 자료
               </button>
             </div>
           )}
         </div>
+
+        {/* 새로운 자료: 활동 1 문제 불러오기 / 모두 지우기 */}
+        {exploring && dataMode === 'custom' && (
+          <div className="flex items-center gap-1.5 flex-wrap justify-end px-4 pt-2">
+            {importable.map((s) => (
+              <button
+                key={`${s.level}-${s.solvedAt}`}
+                onClick={() => changeCustom(s.values, `활동 1 · ${s.level}단계 불러오기`)}
+                className="px-3 py-1.5 rounded-full text-sm font-korean border bg-white border-sky-200 text-sky-800 hover:bg-sky-50 flex items-center gap-1"
+              >
+                <Scale size={14} /> 활동 1 · {s.level}
+              </button>
+            ))}
+            <button
+              onClick={() => changeCustom([], '모두 지우기')}
+              disabled={customValues.length === 0}
+              aria-label="모두 지우기"
+              className="w-9 h-9 rounded-full border border-rose-200 bg-white text-rose-500 flex items-center justify-center hover:bg-rose-50 disabled:opacity-30"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        )}
 
         {/* 그림 이름 */}
         <div className="relative h-7 mt-2 font-korean text-slate-500">
@@ -374,16 +418,20 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
               setP(np);
             }}
             onPDragEnd={(from, to) =>
-              addLog('DRAG_MEAN', `${from} -> ${to} (자료 평균 ${fmt(mean)})`, { activity: 'A2' })
+              addLog('DRAG_MEAN', `${from} -> ${to} (자료 평균 ${Number.isFinite(mean) ? fmt(mean) : '-'})`, { activity: 'A2' })
             }
             view={view}
             morphT={morphT}
             showCells={showCells}
             selected={selected}
             onSelect={setSelected}
-            editable={exploreUnlocked}
+            editable={exploring && dataMode === 'custom'}
             onValueChange={editValue}
-            onValueDragEnd={(i, from, to) => addLog('EDIT_VALUE', `#${i + 1}: ${from} -> ${to}`, { activity: 'A2' })}
+            onValueDragEnd={(i, from, to) =>
+              addLog('EDIT_VALUE', `#${i + 1}: ${from} -> ${to} [${customValues.join(', ')}]`, { activity: 'A2' })
+            }
+            onAddValue={addValue}
+            onRemoveValue={removeValue}
             hint={activeHint}
           />
 
@@ -443,18 +491,28 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
               </div>
             );
           }
+          const hintsOpen = a.retries >= HINT_AFTER_RETRIES && a.hints.length > 0 && a.status !== 'PASS';
+          const justOpened = !open && a.attempts === 0 && !teacherMode;
           return (
             <div
               key={q.id}
-              className={`rounded-2xl border-2 bg-white shadow-sm transition-all ${open ? 'border-indigo-300' : 'border-slate-200'}`}
+              className={`rounded-2xl border-2 bg-white shadow-sm transition-all ${open ? 'border-indigo-300' : 'border-slate-200'} ${
+                justOpened ? 'ring-pulse' : ''
+              }`}
             >
-              <button onClick={() => setOpenId(q.id)} className="w-full text-left px-4 pt-3 pb-2 flex items-start gap-3">
+              <button onClick={() => openQuestion(q.id)} className="w-full text-left px-4 pt-3 pb-2 flex items-start gap-3">
                 <QNum label={q.label} extra={q.usesCustomData} />
                 <span className={`font-korean text-[17px] leading-snug text-slate-800 flex-1 ${open ? '' : 'line-clamp-2'}`}>{q.prompt}</span>
                 <ResultIcon status={a.status} />
               </button>
               {open && (
                 <div className="px-4 pb-4 flex flex-col gap-2">
+                  {q.usesCustomData && (
+                    <span className="self-end flex items-center gap-1 text-xs text-slate-400 font-mono">
+                      [{values.join(', ')}]
+                      <span style={{ color: MEAN.stroke }}>▲{fmt(p)}</span>
+                    </span>
+                  )}
                   <textarea
                     value={a.text}
                     onChange={(e) => setAnswer(q.id, { text: e.target.value })}
@@ -463,16 +521,16 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
                     placeholder="✏️"
                     className="w-full rounded-xl border-2 border-slate-200 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none p-3 text-[16px] leading-relaxed resize-y"
                   />
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => submit(q)}
                       disabled={!a.text.trim() || a.status === 'loading'}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 text-white font-korean hover:bg-indigo-700 disabled:opacity-40 active:scale-95 transition"
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 text-white font-korean whitespace-nowrap hover:bg-indigo-700 disabled:opacity-40 active:scale-95 transition"
                     >
                       {a.status === 'loading' ? <RotateCcw size={18} className="animate-spin" /> : <Send size={18} />}
                       제출
                     </button>
-                    {a.hints.length > 0 && a.status !== 'PASS' && a.status !== 'loading' && (
+                    {hintsOpen && (
                       <button
                         onClick={() => playHints(a.hints, q)}
                         aria-label="힌트 다시 보기"
@@ -481,11 +539,14 @@ export function Activity2({ playerName, addLog, onTeacherNote, solvedProblems }:
                         <Lightbulb size={20} className="text-amber-500 fill-amber-200" />
                       </button>
                     )}
-                    {q.usesCustomData && (
-                      <span className="ml-auto flex items-center gap-1 text-xs text-slate-400 font-mono">
-                        [{values.join(', ')}]
-                        <span style={{ color: MEAN.stroke }}>▲{fmt(p)}</span>
-                      </span>
+                    {teacherMode && (
+                      <button
+                        onClick={() => playHints(hintsForMissing(q, q.ideas.map((i) => i.id)), q)}
+                        aria-label="힌트 미리보기 (교사)"
+                        className="h-11 px-3 rounded-full bg-slate-800 text-white text-xs font-bold whitespace-nowrap flex items-center gap-1.5 hover:bg-slate-700"
+                      >
+                        <Lightbulb size={16} className="text-amber-300" /> 교사: 힌트 미리보기
+                      </button>
                     )}
                   </div>
                 </div>

@@ -111,12 +111,40 @@ body {
   border-radius: 0.75rem;
 }
 
+/* 새로 열린 문항 카드 */
+.ring-pulse {
+  animation: attention 1.6s ease-in-out infinite;
+}
+
+/* 새 자료 만들기: 누를 수 있는 점선 자리 */
+.ghost {
+  opacity: 0.55;
+  transition: opacity 0.15s;
+}
+.ghost:hover {
+  opacity: 1;
+}
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.soft-pulse {
+  animation: soft-pulse 1.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hint-pulse,
   .marching,
   .glow-line,
   .nudge-x,
   .attention,
+  .ring-pulse,
+  .soft-pulse,
   .animate-float {
     animation-duration: 3s;
   }

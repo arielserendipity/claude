@@ -6,6 +6,7 @@ import { Home } from './components/Home';
 import { TeacherPanel } from './components/TeacherPanel';
 import { AddLog, LogEntry, Screen, SolvedProblem, TeacherNote } from './types';
 import { removeStoredByPrefix, useStoredState } from './lib/storage';
+import { isTeacherName } from './lib/teacher';
 
 const MAX_LOGS = 3000;
 const MAX_NOTES = 300;
@@ -24,6 +25,7 @@ function App() {
   const [showTeacherPanel, setShowTeacherPanel] = useState(false);
 
   const name = playerName.trim();
+  const teacherMode = isTeacherName(name);
   const nameRef = useRef(name);
   const sheetUrlRef = useRef(sheetUrl);
   useEffect(() => {
@@ -119,8 +121,12 @@ function App() {
 
         <div className="flex items-center gap-2">
           {name && screen !== 'HOME' && (
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 font-korean">
-              <UserRound size={16} /> {name}
+            <span
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-korean ${
+                teacherMode ? 'bg-slate-800 text-amber-300' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              <UserRound size={16} /> {teacherMode ? '교사 미리보기' : name}
             </span>
           )}
           <button
@@ -141,6 +147,7 @@ function App() {
         <div className={screen === 'ACTIVITY1' ? 'flex-1 min-h-0 flex' : 'hidden'}>
           <Activity1
             key={`a1-${name}`}
+            teacherMode={teacherMode}
             addLog={addLog}
             onTeacherNote={addTeacherNote}
             onSolved={addSolved}
@@ -151,7 +158,7 @@ function App() {
 
       {visited.A2 && name && (
         <div className={screen === 'ACTIVITY2' ? 'flex-1 min-h-0 flex' : 'hidden'}>
-          <Activity2 key={`a2-${name}`} playerName={name} addLog={addLog} onTeacherNote={addTeacherNote} solvedProblems={solved} />
+          <Activity2 key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} solvedProblems={solved} />
         </div>
       )}
 
