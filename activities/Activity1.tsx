@@ -163,6 +163,9 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
     const nextMean = nextBlocks.reduce((a, b) => a + b.position, 0) / nextBlocks.length;
     const start = startFulcrum(fulcrumPosition, nextMean);
     if (start !== fulcrumPosition) setFulcrumPosition(start);
+    if (params.forceInteger && !Number.isInteger(nextMean)) {
+      log('HALF_ALLOWED', `Level ${level + 1}: 추 ${params.blocksToAdd}개로는 자연수 정답을 바꿀 수 없어 0.5 정답(${nextMean}) 허용`);
+    }
     levelStartTimeRef.current = Date.now();
     setAppState('PLAYING');
     addLog('NEXT_LEVEL', `Level ${level + 1} started.`, { activity: 'A1', level: level + 1, failCount: 0 });

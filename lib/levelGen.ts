@@ -2,13 +2,16 @@ import { Block } from '../types';
 import { ITEM_COLORS } from './palette';
 
 // 활동 1: 이전 추는 그대로 두고 새 추를 더해, 평균(균형점)이 자연수(또는 0.5 단위)가 되게 만든다.
-// 새 추는 여러 자리에 고르게 놓는다. (예전에는 균형점을 이전 정답에서 가장 멀리 옮기는 경우만 골랐는데,
-// 추가 많아질수록 균형점을 옮기려면 끝(1·10)에 놓을 수밖에 없어 새 추가 한 곳에만 계속 쌓였다.)
+// 새 추는 여러 자리에 고르게 놓는다. 예전에는 새 추가 한 곳에만 쌓였다:
+// 추 1개·자연수 정답 단계에서는 추가 5개쯤 쌓이면 정답을 자연수로 두는 자리가 지금 균형점뿐이라
+// 새 추가 매번 균형점 자리에 놓였고(정답도 그대로), 추 2개 단계에서는 균형점을 멀리 옮기려고 1이나 10에 쌓였다.
+// - 한 단계에 정해진 개수(1개, 빨리 풀면 2개)만 놓는다. 그 개수로는 자연수·0.5 정답을 만들 수 없을 때만 더 놓는다.
+// - 균형점은 되도록 이전 정답과 다르게 한다. 자연수 정답 단계라도 정해진 개수로 자연수 정답을 바꿀 수 없으면
+//   그 단계만 0.5 단위 정답을 허용한다.
 // - 균형점은 2~9 사이에 둔다(시소 끝에 붙지 않게).
 // - 한 자리에는 추를 3개까지만 쌓는다.
 // - 이미 추가 많은 자리, 새 추끼리 같은 자리, 시소 끝(1·10)은 피하고, 그중에서 무작위로 고른다.
-// - 균형점이 이전 정답과 같아지는 경우는 덜 고른다. 그래도 받침점이 새 균형점과 너무 가까우면
-//   활동 1이 받침점을 멀리 옮겨 놓고 시작한다(startFulcrum).
+// - 그래도 받침점이 새 균형점과 너무 가까우면 활동 1이 받침점을 멀리 옮겨 놓고 시작한다(startFulcrum).
 // - 균형점이 양 끝 추의 한가운데나 가운데 추와 같아지는 문제는 덜 고른다(오개념과 구별되도록).
 
 const MIN_V = 1;
@@ -86,12 +89,13 @@ export function generateNewBlocks(currentBlocks: Block[], minBlocksToAdd: number
   ];
 
   const kMin = Math.max(1, minBlocksToAdd);
-  const scoreFor = (k: number, rules: Rules) => {
-    const scored: { vals: number[]; score: number }[] = [];
+  type Scored = { vals: number[]; score: number; move: number };
+  const scoreFor = (k: number, rules: Rules, half: boolean): Scored[] => {
+    const scored: Scored[] = [];
     for (const vals of combos(k)) {
       const total = sum + vals.reduce((a, b) => a + b, 0);
       const N = n + k;
-      const ok = forceInteger ? total % N === 0 : (total * 2) % N === 0;
+      const ok = half ? (total * 2) % N === 0 : total % N === 0;
       if (!ok) continue;
       const avg = total / N;
       if (avg < rules.range[0] || avg > rules.range[1]) continue;
@@ -107,21 +111,24 @@ export function generateNewBlocks(currentBlocks: Block[], minBlocksToAdd: number
       const ends = vals.filter((v) => v === MIN_V || v === MAX_V).length; // 시소 끝
       const same = move < 1e-9 ? 1 : 0; // 이전 정답과 같은 균형점
       const farMove = Math.max(0, move - 3); // 너무 멀리 옮겨 가는 균형점
-      const extra = k - kMin; // 정해진 개수보다 더 놓는 추
       const midrange = (Math.min(...all) + Math.max(...all)) / 2;
       const lookalike = (avg === midrange ? 1 : 0) + (avg === median(all) ? 0.5 : 0);
-      scored.push({ vals, score: 1.2 * crowd + 2 * dup + 0.6 * ends + 6 * same + 2 * extra + 0.8 * farMove + lookalike });
+      scored.push({ vals, move, score: 1.2 * crowd + 2 * dup + 0.6 * ends + 6 * same + 0.8 * farMove + lookalike });
     }
     return scored;
   };
+  const changes = (xs: Scored[]) => xs.some((x) => x.move > 1e-9);
 
   for (const rules of ladder) {
-    // 추를 1개 더하는 단계에서는, 1개로는 균형점이 바뀌지 않을 때 2개를 놓을 수도 있다(한 단계에 1~2개).
-    const firstKs = kMin === 1 ? [1, 2] : [kMin];
-    let scored = firstKs.flatMap((k) => scoreFor(k, rules));
     // 정해진 개수로는 균형점을 자연수(0.5)로 만들 수 없을 때만 더 놓는다
-    for (let k = firstKs[firstKs.length - 1] + 1; !scored.length && k <= MAX_ADD; k++) scored = scoreFor(k, rules);
-    if (scored.length) {
+    for (let k = kMin; k <= MAX_ADD; k++) {
+      let scored = scoreFor(k, rules, !forceInteger);
+      if (forceInteger && !changes(scored)) {
+        // 자연수로는 정답을 바꿀 수 없는 단계: 이 단계만 0.5 정답을 허용한다
+        const half = scoreFor(k, rules, true);
+        if (changes(half) || !scored.length) scored = half;
+      }
+      if (!scored.length) continue;
       const best = Math.min(...scored.map((x) => x.score));
       const pool = scored.filter((x) => x.score <= best + 1);
       const pick = pool[Math.floor(Math.random() * pool.length)];
