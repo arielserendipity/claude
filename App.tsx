@@ -23,6 +23,8 @@ function App() {
     ((import.meta as any).env?.VITE_GOOGLE_SHEETS_URL as string) || ''
   );
   const [solved, setSolved] = useSessionState<SolvedProblem[]>(`avg_solved_${playerName.trim()}`, []);
+  // 활동 1에서 본 시각 힌트 (활동 2 응답의 지원 이력에 함께 남긴다)
+  const [a1Supports, setA1Supports] = useSessionState<string[]>(`avg_a1sup_${playerName.trim()}`, []);
   const [notes, setNotes] = useStoredState<TeacherNote[]>('avg_teacher_notes', []);
   const [logs, setLogs] = useStoredState<LogEntry[]>('avg_activity_logs', []);
   const [showTeacherPanel, setShowTeacherPanel] = useState(false);
@@ -69,6 +71,11 @@ function App() {
       );
     },
     [setNotes]
+  );
+
+  const addA1Support = useCallback(
+    (kind: string) => setA1Supports((prev) => (prev.includes(kind) ? prev : [...prev, kind])),
+    [setA1Supports]
   );
 
   const addSolved = useCallback(
@@ -158,6 +165,7 @@ function App() {
             addLog={addLog}
             onTeacherNote={addTeacherNote}
             onSolved={addSolved}
+            onSupportSeen={addA1Support}
             onGoActivity2={() => open('ACTIVITY2')}
           />
         </div>
@@ -165,7 +173,7 @@ function App() {
 
       {visited.A2 && name && (
         <div className={screen === 'ACTIVITY2' ? 'flex-1 min-h-0 flex' : 'hidden'}>
-          <Activity2 key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} solvedProblems={solved} />
+          <Activity2 key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} a1Supports={a1Supports} />
         </div>
       )}
 

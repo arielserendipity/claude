@@ -11,12 +11,13 @@ interface Activity1Props {
   addLog: AddLog;
   onTeacherNote: (note: Omit<TeacherNote, 'id' | 'timestamp' | 'playerName'>) => void;
   onSolved: (problem: SolvedProblem) => void;
+  onSupportSeen?: (kind: string) => void; // 본 시각 힌트를 활동 2 지원 이력에 넘긴다
   onGoActivity2: () => void;
 }
 
 const MAX_LEVEL = 10;
 
-export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onGoActivity2 }: Activity1Props) {
+export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupportSeen, onGoActivity2 }: Activity1Props) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [fulcrumPosition, setFulcrumPosition] = useState(5.5);
   const [appState, setAppState] = useState<AppState>('LOBBY');
@@ -113,6 +114,7 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onGoAc
         // 2회 이상 틀리면 시각 힌트(거리 곡선), 3회 이상이면 거리의 합 막대까지 켠다
         if (analysis.showVisualHint) {
           setIsHintActive(true);
+          onSupportSeen?.(calculatedFailCount >= 3 ? '거리 곡선+거리의 합' : '거리 곡선');
           log('VISUAL_HINT_ON', `hint level ${calculatedFailCount >= 3 ? 2 : 1}`, {
             failCount: calculatedFailCount,
             hint: calculatedFailCount >= 3 ? '거리 곡선 + 왼쪽/오른쪽 거리의 합' : '거리 곡선',

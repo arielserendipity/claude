@@ -1,446 +1,305 @@
-import type { HintKey, HintRef } from './hints';
+// 활동 2: 균형점 모델(시소 그림)과 막대 모델(막대 그림) 연결하기
+// '정해진 설명을 쓰고 통과하기'가 아니라 '관찰하고, 예상하고, 관계를 확인하기'로 진행한다.
+// 학생에게는 판정을 보여 주지 않는다. 분석(연결의 증거)은 교사용 기록에만 남는다.
+
+import { supportLabel } from './hints';
 
 // 활동 2 기본 자료 (합 35, 7개 → 평균 5)
-// 모자란 양: 3+2+1+1 = 7, 넘친 양: 1+2+4 = 7
 export const DEFAULT_VALUES = [2, 3, 4, 4, 6, 7, 9];
 
-export type QuestionId = 'q1' | 'q2a' | 'q2b' | 'q3a' | 'q3b' | 'q4';
+export type TaskId = 'explore' | 'match' | 'predict' | 'change' | 'summary';
 
-// 학생은 한 문항의 답을 그림별 칸에 나누어 쓴다
-export type PartModel = 'bar' | 'beam' | 'link';
+// 다른 그림 예상하기에서 시소의 모습
+export type Tilt = 'left' | 'flat' | 'right';
+export type Choice = Tilt | 'unsure';
 
-export const PART_TITLE: Record<PartModel, string> = {
-  bar: '막대 그림에서',
-  beam: '시소 그림에서',
-  link: '두 그림을 이어 보면',
+export const CHOICE_LABEL: Record<Choice, string> = {
+  left: '왼쪽이 내려가요',
+  flat: '평평해요',
+  right: '오른쪽이 내려가요',
+  unsure: '아직 모르겠어요',
 };
 
-// 한 아이디어 = 학생 화면의 답 칸 하나 (발문 + 쓰는 칸 + ✓)
-export interface Idea {
+export const PREDICT_ROUNDS = [4, 5, 6] as const;
+export const CHANGE_P = 5;
+
+export interface TaskStep {
   id: string;
-  part: PartModel; // 어느 그림에 대해 쓰는 칸인지
-  ask: string; // 그 칸의 발문 (학생에게 보임, 답은 알려 주지 않음)
-  teacher: string; // 교사용 채점 기준 설명
-  accept: string; // 인정하는 표현 예 (AI 채점 안내용)
-  hint: HintKey; // 이 아이디어가 빠졌을 때 보여줄 시각 힌트
-  hintTarget?: number; // 강조할 자료값
-  // AI를 쓸 수 없을 때의 규칙 채점: 모든 그룹에서 하나 이상 일치하면 충족
-  groups: string[][];
+  title: string; // 기록 칸 이름
+  ask: string; // 학생에게 보이는 발문
 }
 
-export interface Question {
-  id: QuestionId;
+export interface TaskDef {
+  id: TaskId;
   label: string;
-  prompt: string; // 문항 첫 발문 (그림에서 무엇을 해 볼지)
-  modelAnswer: string; // 교사용 예시 답안
-  ideas: Idea[];
-  usesCustomData?: boolean; // 학생이 만든 자료로 답하는 문항
-  startP?: number; // 문항을 열 때 초록색(평균선·받침점)의 처음 위치 (기본 5)
-  focusValue?: number; // 문항을 여는 동안 두 그림에서 빛나게 할 자료값 (막대와 추)
+  title: string;
+  prompt: string; // 첫 발문
+  steps: TaskStep[]; // 글로 쓰는 칸 (선택·예상 같은 다른 응답은 화면에서 따로 받음)
+  goal: string; // 교사용: 무엇을 보려는 활동인지
+  look: string; // 교사용: 반응에서 살펴볼 것
+  help: [string, string, string]; // 도움 1(탐색 질문)·2(대상 제안)·3(대응 보여 주기 설명)
 }
 
-// 학생이 칸마다 쓴 답 (idea id → 글)
-export type PartAnswers = Record<string, string>;
-
-// 문항 설계 원칙 (초등 5학년)
-// - 평가하듯 묻지 않고, 그림을 조작하며 스스로 알아내도록 이끄는 발문으로 묻는다.
-// - 첫 발문은 막대 그림과 시소 그림에 똑같이 적용되는 하나의 과제로 낸다
-//   (예: "9가 평균보다 얼마나 큰지가 두 그림에서 각각 어떻게 나타나는지 찾아보세요").
-// - 막대 그림 칸과 시소 그림 칸의 발문은 같은 틀로 묻고(그림 이름과 대상만 바뀜),
-//   "이것은 평균과 비교해 어떻다는 뜻일까요?"처럼 그 그림에서의 뜻을 쓰게 한다.
-// - 모든 문항에 '두 그림을 이어 보면' 칸을 두어, 막대 그림의 무엇이 시소 그림의 무엇이 되는지 쓰게 한다.
-// - 수를 세는 발문은 그림에서 셀 수 있는 것(칸, 거리)만 묻는다.
-// - 용어 약속: 두 그림에서 함께 움직이는 초록 표시는 '초록색'이라 부른다.
-//   막대 그림의 초록색(초록 선) = '평균선', 시소 그림의 초록색(초록 세모) = '받침점'.
-//   두 그림에 함께 하는 조작은 '초록색', 한 그림에 대한 발문은 '평균선' 또는 '받침점'으로만 쓴다.
-export const QUESTIONS: Question[] = [
+export const TASKS: TaskDef[] = [
   {
-    id: 'q1',
+    id: 'explore',
     label: '1',
-    prompt:
-      '초록색(막대 그림의 평균선, 시소 그림의 받침점)은 두 그림에서 함께 움직여요. 자료 2, 3, 4, 4, 6, 7, 9의 평균을 구하고, 초록색을 평균에 놓았을 때 막대 그림과 시소 그림이 각각 어떻게 되는지 살펴보세요.',
-    modelAnswer:
-      '평균은 35÷7=5이다. [막대 그림] 초록색(평균선)이 5에 있으면 넘친 칸과 모자란 칸이 생기고, 넘친 칸으로 모자란 칸을 채우면 모든 막대가 5로 똑같아진다. 막대 그림에서 평균은 막대들을 고르게 했을 때의 높이이다. ' +
-      '[시소 그림] 초록색(받침점)이 5에 있으면 시소가 평평해진다. 시소 그림에서 평균은 시소가 평평해지는 균형점이다. ' +
-      '[이어 보기] 평균 5는 막대들을 고르게 한 높이이면서, 시소가 평평해지는 균형점이다. 두 그림의 초록색은 같은 수(평균)를 나타낸다.',
-    startP: 3,
-    ideas: [
-      {
-        id: 'q1_bar',
-        part: 'bar',
-        ask: '초록색이 평균에 있을 때 막대 그림은 어떻게 되나요? 막대 그림에서 평균은 무엇을 뜻할까요?',
-        teacher: '넘친 칸으로 모자란 칸을 채우면 모든 막대가 5로 같아짐 → 막대 그림에서 평균은 막대들을 고르게 했을 때의 높이',
-        accept:
-          '모두 5가 된다, 막대 높이가 똑같아진다, 평균은 막대를 고르게 한 높이, 넘친 칸과 모자란 칸이 같아지는 높이, 넘친 것으로 모자란 것을 채운 높이',
-        hint: 'LEVELING',
-        groups: [
-          ['5', '다섯', '평균', '높이', '넘', '모자', '막대'],
-          ['똑같', '같아', '같은', '같다', '같고', '고르', '평평', '나란', '채워', '채우', '채운', '메워', '메우', '반듯'],
-        ],
-      },
-      {
-        id: 'q1_beam',
-        part: 'beam',
-        ask: '초록색이 평균에 있을 때 시소 그림은 어떻게 되나요? 시소 그림에서 평균은 무엇을 뜻할까요?',
-        teacher: '받침점이 평균 5에 있으면 시소가 평평해짐 → 시소 그림에서 평균은 시소가 평평해지는 균형점',
-        accept: '시소가 평평해진다, 기울지 않는다, 평균은 균형점이다, 평균은 시소가 균형을 이루는 곳, 받침점이 5면 평평',
-        hint: 'MEAN_LINK',
-        groups: [
-          ['5', '다섯', '평균', '받침', '시소', '저울', '균형점'],
-          ['평평', '수평', '균형', '기울지', '안\\s*기울', '반듯'],
-        ],
-      },
-      {
-        id: 'q1_link',
-        part: 'link',
-        ask: '두 그림에서 알아낸 평균의 뜻을 비교해 보세요. 두 그림을 함께 생각하면 평균은 어떤 수라고 말할 수 있을까요?',
-        teacher: '평균 = 막대들을 고르게 한 높이 = 시소가 평평해지는 균형점 (평균선과 받침점은 같은 수를 나타냄)',
-        accept:
-          '평균은 막대를 고르게 한 높이이면서 시소가 평평해지는 균형점이다, 막대가 똑같아지는 곳과 시소가 균형을 이루는 곳이 둘 다 평균이다, 평균선이 받침점이 된다',
-        hint: 'MEAN_LINK',
-        groups: [
-          ['고르', '똑같', '같은\\s*높이', '채', '막대', '평균선'],
-          ['평평', '수평', '균형', '기울', '시소', '저울', '받침'],
-        ],
-      },
+    title: '움직이며 살펴보기',
+    prompt: '초록색의 위치를 여러 곳으로 옮겨 보세요. 두 그림에서 바뀌는 것과 그대로인 것을 찾아보세요.',
+    steps: [
+      { id: 'observe', title: '바뀐 것과 그대로인 것', ask: '초록 선을 옮겼을 때 바뀐 것은 무엇이고, 그대로인 것은 무엇인가요?' },
+      { id: 'level', title: '모두 같은 높이로', ask: '이 막대들을 모두 같은 높이로 만들려면 어떻게 해야 할까요?' },
+    ],
+    goal: '관찰(초록색을 옮길 때 바뀌는 것·그대로인 것)과 재분배(막대를 고르게 만드는 방법)를 따로 묻는다.',
+    look:
+      '관찰: 막대 높이(자료값)는 그대로이고, 초록 선 위·아래 칸과 시소의 기울기가 바뀐다. 재분배: 높은 막대에서 떼어 낮은 막대를 채운다(모두 5). 초록 선은 아직 평균을 뜻하지 않으므로 “막대 높이는 그대로”라는 관찰도 정확한 관찰이다.',
+    help: [
+      '초록색을 옮기면서 두 그림을 번갈아 보세요. 어느 부분이 달라지나요?',
+      '막대 하나를 골라, 초록색을 옮길 때 그 막대와 초록 선 사이가 어떻게 되는지 살펴보세요.',
+      '칸 표시와 같은 자료 강조를 켰어요. 두 그림에서 같은 자료를 비교해 보세요.',
     ],
   },
   {
-    id: 'q2a',
-    label: '2-1',
-    focusValue: 9,
-    prompt: '9는 평균 5보다 큰 자료예요. 9가 평균보다 얼마나 큰지가 막대 그림과 시소 그림에서 각각 어떻게 나타나는지 찾아보세요.',
-    modelAnswer:
-      '[막대 그림] 9인 막대의 끝은 평균선에서 위로 4칸 떨어져 있다. 9가 평균보다 4만큼 크다는 뜻이다. ' +
-      '[시소 그림] 9의 추는 받침점에서 오른쪽으로 4칸 떨어져 있다. 이것도 9가 평균보다 4만큼 크다는 뜻이다. ' +
-      '[이어 보기] 두 수는 4로 같다. 막대 그림의 넘친 칸이 시소 그림에서는 추와 받침점 사이의 거리가 된다.',
-    ideas: [
-      {
-        id: 'q2a_bar',
-        part: 'bar',
-        ask: '9인 막대의 끝은 평균선에서 어느 쪽으로 몇 칸 떨어져 있나요? 이것은 9가 평균과 비교해 어떻다는 뜻일까요?',
-        teacher: '평균선 위로 4칸 → 9가 평균보다 4만큼 크다 (넘친 4칸을 다른 막대에 나눠 줄 수 있음)',
-        accept: '위로 4칸, 9-5=4, 평균보다 4 크다, 4만큼 넘친다, 4를 나눠 줄 수 있다',
-        hint: 'EXCESS_TO_DISTANCE',
-        hintTarget: 9,
-        groups: [
-          ['4', '넷', '네\\s*칸'],
-          ['크', '큰', '많', '넘', '차이', '남', '나눠', '나누', '줄\\s*수'],
-        ],
-      },
-      {
-        id: 'q2a_beam',
-        part: 'beam',
-        ask: '9의 추는 받침점에서 어느 쪽으로 몇 칸 떨어져 있나요? 이것은 9가 평균과 비교해 어떻다는 뜻일까요?',
-        teacher: '받침점 오른쪽으로 4칸 → 9가 평균(받침점)보다 4만큼 크다',
-        accept: '오른쪽으로 4칸, 평균보다 4 크다, 받침점(평균)에서 4만큼 떨어져 있으니 4 크다, 시소를 오른쪽으로 기울게 한다',
-        hint: 'EXCESS_TO_DISTANCE',
-        hintTarget: 9,
-        groups: [
-          ['4', '넷', '네\\s*칸'],
-          ['크', '큰', '많', '차이', '기울', '무거', '누르', '눌러'],
-        ],
-      },
-      {
-        id: 'q2a_link',
-        part: 'link',
-        ask: '두 그림에서 찾은 수를 비교해 보세요. 막대 그림에서 평균선 위로 넘친 칸은 시소 그림에서 무엇이 되나요?',
-        teacher: '두 수가 4로 같다 → 막대의 넘친 칸 수가 추와 받침점 사이의 거리가 된다',
-        accept: '둘 다 4로 같다, 넘친 칸이 추와 받침점 사이 거리가 됐다, 넘친 4칸 = 떨어진 4칸',
-        hint: 'CELLS_TO_DISTANCE',
-        groups: [['거리', '떨어', '사이', '간격', '추', '받침']],
-      },
+    id: 'match',
+    label: '2',
+    title: '같은 자료 찾아보기',
+    prompt: '막대 하나를 골라 보세요. 이 자료는 다른 그림에서 어디에 나타나나요? 그렇게 생각한 까닭을 표시해 보세요.',
+    steps: [
+      { id: 'reason', title: '그렇게 생각한 까닭', ask: '고른 막대와 추가 같은 자료라고 생각한 까닭을 써 보세요.' },
+      { id: 'reflect', title: '확인한 뒤', ask: '예상과 같았나요? 생각이 달라졌다면 무엇 때문인가요?' },
+    ],
+    goal: '두 그림에서 같은 자료(막대 하나 ↔ 추 하나)를 학생이 스스로 찾는지 본다. 같은 색·이름표·동시 강조는 짝을 확인한 뒤에 보여 준다.',
+    look: '막대 높이(자료값)와 시소 눈금 위 추의 위치를 같은 수로 잇는지, 그 까닭을 수·위치로 말하는지.',
+    help: [
+      '어느 부분을 보고 그렇게 생각했나요?',
+      '고른 막대의 높이(수)를 보고, 시소 그림의 눈금에서 같은 수를 찾아보세요.',
+      '같은 자료를 같은 색으로 보여 주고, 막대 그림이 시소 그림으로 바뀌는 모습을 보여 줄게요.',
     ],
   },
   {
-    id: 'q2b',
-    label: '2-2',
-    focusValue: 2,
-    prompt: '2는 평균 5보다 작은 자료예요. 2가 평균보다 얼마나 작은지가 막대 그림과 시소 그림에서 각각 어떻게 나타나는지 찾아보세요.',
-    modelAnswer:
-      '[막대 그림] 2인 막대의 끝은 평균선에서 아래로 3칸 떨어져 있다(평균선까지 3칸 모자란다). 2가 평균보다 3만큼 작다는 뜻이다. ' +
-      '[시소 그림] 2의 추는 받침점에서 왼쪽으로 3칸 떨어져 있다. 이것도 2가 평균보다 3만큼 작다는 뜻이다. ' +
-      '[이어 보기] 두 수는 3으로 같다. 막대 그림에서 평균선 아래로 부족한 칸이 시소 그림에서는 추와 받침점 사이의 거리(받침점 왼쪽)가 된다.',
-    ideas: [
-      {
-        id: 'q2b_bar',
-        part: 'bar',
-        ask: '2인 막대의 끝은 평균선에서 어느 쪽으로 몇 칸 떨어져 있나요? 이것은 2가 평균과 비교해 어떻다는 뜻일까요?',
-        teacher: '평균선 아래로 3칸(평균선까지 3칸 모자람) → 2가 평균보다 3만큼 작다 (평균이 되려면 3을 받아야 함)',
-        accept: '아래로 3칸, 3칸 모자란다, 5-2=3, 평균보다 3 작다, 3을 더 받아야 한다',
-        hint: 'DEFICIT_TO_GAP',
-        hintTarget: 2,
-        groups: [
-          ['3', '셋', '세\\s*칸'],
-          ['작', '적', '모자', '부족', '받아', '받으', '차이', '덜'],
-        ],
-      },
-      {
-        id: 'q2b_beam',
-        part: 'beam',
-        ask: '2의 추는 받침점에서 어느 쪽으로 몇 칸 떨어져 있나요? 이것은 2가 평균과 비교해 어떻다는 뜻일까요?',
-        teacher: '받침점 왼쪽으로 3칸 → 2가 평균(받침점)보다 3만큼 작다',
-        accept: '왼쪽으로 3칸, 평균보다 3 작다, 받침점(평균)에서 왼쪽으로 3만큼 떨어져 있으니 3 작다, 시소를 왼쪽으로 기울게 한다',
-        hint: 'DEFICIT_TO_GAP',
-        hintTarget: 2,
-        groups: [
-          ['3', '셋', '세\\s*칸'],
-          ['작', '적', '모자', '부족', '차이', '덜', '가벼', '기울'],
-        ],
-      },
-      {
-        id: 'q2b_link',
-        part: 'link',
-        ask: '두 그림에서 찾은 수를 비교해 보세요. 막대 그림에서 평균선 아래로 부족한 칸은 시소 그림에서 무엇이 되나요?',
-        teacher: '두 수가 3으로 같다 → 막대의 부족한(모자란) 칸 수가 추와 받침점 사이의 거리(받침점 왼쪽)가 된다',
-        accept: '둘 다 3으로 같다, 부족한 칸이 추와 받침점 사이 거리가 됐다, 모자란 3칸 = 떨어진 3칸, 왼쪽 거리가 된다',
-        hint: 'CELLS_TO_DISTANCE',
-        groups: [['거리', '떨어', '사이', '간격', '추', '받침']],
-      },
+    id: 'predict',
+    label: '3',
+    title: '다른 그림 예상하기',
+    prompt: '시소 그림을 잠깐 가릴게요. 초록색이 4에 있을 때 시소가 어떻게 될지 예상해 보세요. 막대 그림에서 도움이 된 부분도 표시해 보세요.',
+    steps: [
+      { id: 'reason', title: '까닭 (쓰고 싶으면)', ask: '그렇게 예상한 까닭이 있으면 짧게 써 보세요.' },
+      { id: 'reflect', title: '확인한 뒤', ask: '예상과 같았나요? 생각이 달라졌다면 무엇 때문인가요?' },
+    ],
+    goal: '막대 그림만 보고 시소의 모습을 예상하게 해, 막대 그림의 넘침·모자람을 시소의 오른쪽·왼쪽 거리와 대응시켜 근거로 쓰는지 본다. 4·5·6을 비교하면 무엇끼리 대응하는지와 언제 양쪽 합이 같아지는지를 구별할 수 있다.',
+    look:
+      '기준 4: 넘침 10 = 오른쪽 거리 10, 모자람 3 = 왼쪽 거리 3 → 오른쪽이 내려감. 기준 5: 모두 7 → 평평. 기준 6: 넘침 4, 모자람 11 → 왼쪽이 내려감. 예상의 근거로 넘침과 모자람을 비교했는지.',
+    help: [
+      '어느 부분을 보고 그렇게 예상했나요?',
+      '초록 선 위로 넘친 부분과 아래로 모자란 부분을 비교해 보세요.',
+      '막대 그림에 칸을 표시했어요. 넘친 칸과 모자란 칸을 세어 비교해 보세요.',
     ],
   },
   {
-    id: 'q3a',
-    label: '3-1',
-    prompt:
-      "초록색을 평균 5에 두고 '칸' 버튼을 눌러 보세요. 평균보다 큰 쪽과 작은 쪽을 막대 그림과 시소 그림에서 각각 모두 세어 보세요.",
-    modelAnswer:
-      '[막대 그림] 넘친 칸은 1+2+4=7칸, 모자란 칸은 3+2+1+1=7칸이다. ' +
-      '[시소 그림] 받침점 오른쪽 추들의 거리는 1+2+4=7칸, 왼쪽 추들의 거리는 3+2+1+1=7칸이다. ' +
-      '[이어 보기] 네 수가 모두 7이다. 넘친 칸의 합은 오른쪽 거리의 합과, 모자란 칸의 합은 왼쪽 거리의 합과 같은 것을 나타낸다.',
-    ideas: [
-      {
-        id: 'q3a_bar',
-        part: 'bar',
-        ask: '평균선 위로 넘친 칸은 모두 몇 칸이고, 평균선까지 모자란 칸은 모두 몇 칸인가요?',
-        teacher: '넘친 칸 1+2+4=7, 모자란 칸 3+2+1+1=7',
-        accept: '넘친 칸 7칸 모자란 칸 7칸, 둘 다 7',
-        hint: 'LEVELING',
-        groups: [
-          ['7', '일곱'],
-          ['넘', '모자', '남', '부족', '둘\\s*다', '모두'],
-        ],
-      },
-      {
-        id: 'q3a_beam',
-        part: 'beam',
-        ask: '받침점 오른쪽 추들의 거리는 모두 몇 칸이고, 받침점 왼쪽 추들의 거리는 모두 몇 칸인가요?',
-        teacher: '오른쪽 거리의 합 1+2+4=7, 왼쪽 거리의 합 3+2+1+1=7',
-        accept: '오른쪽 7칸 왼쪽 7칸, 양쪽 다 7',
-        hint: 'SUM_BALANCE',
-        groups: [
-          ['7', '일곱'],
-          ['왼', '오른', '양쪽', '둘\\s*다', '모두'],
-        ],
-      },
-      {
-        id: 'q3a_link',
-        part: 'link',
-        ask: '두 그림에서 구한 네 수를 비교해 보세요. 막대 그림의 어떤 합과 시소 그림의 어떤 합이 같은 것을 나타내나요?',
-        teacher: '넘친 칸의 합(7) = 오른쪽 거리의 합(7), 모자란 칸의 합(7) = 왼쪽 거리의 합(7)',
-        accept: '넘친 칸 합과 오른쪽 거리 합, 모자란 칸 합과 왼쪽 거리 합, 넘친 칸은 오른쪽 모자란 칸은 왼쪽',
-        hint: 'CELLS_TO_DISTANCE',
-        groups: [
-          ['넘', '모자', '칸'],
-          ['오른', '왼', '거리'],
-        ],
-      },
-    ],
-  },
-  {
-    id: 'q3b',
-    label: '3-2',
-    prompt:
-      '3-1에서 막대 그림의 넘친 칸과 모자란 칸의 합이 같았고, 시소 그림의 오른쪽과 왼쪽 거리의 합도 같았어요. 이것이 막대 그림과 시소 그림에서 각각 무엇을 뜻하는지 알아보세요.',
-    modelAnswer:
-      '[막대 그림] 넘친 칸으로 모자란 칸을 남김없이 꼭 맞게 채울 수 있어서 모든 막대가 평균 5로 고르게 된다. ' +
-      '[시소 그림] 오른쪽 거리의 합과 왼쪽 거리의 합이 같아서 양쪽 추들이 시소를 기울게 하는 정도가 같으므로 시소가 평평해진다. ' +
-      '[이어 보기] 넘친 칸은 시소 그림에서 오른쪽 거리이고, 모자란 칸은 왼쪽 거리이니까, 넘친 칸의 합과 모자란 칸의 합이 같으면 오른쪽 거리의 합과 왼쪽 거리의 합도 같아져서 시소가 평평해진다. 그래서 막대들이 고르게 되는 것과 시소가 평평해지는 것은 같은 뜻이다.',
-    ideas: [
-      {
-        id: 'q3b_bar',
-        part: 'bar',
-        ask: '넘친 칸의 합과 모자란 칸의 합이 같으면 막대들은 어떻게 될 수 있나요? 넘친 칸을 떼어 모자란 칸에 채운다고 생각해 보세요.',
-        teacher: '넘친 칸으로 모자란 칸을 남김없이 꼭 맞게 채울 수 있음 → 모든 막대가 평균 5로 고르게 된다',
-        accept: '모두 5가 된다, 막대 높이가 똑같아진다, 남는 칸도 모자란 칸도 없이 딱 맞는다, 고르게 된다',
-        hint: 'LEVELING',
-        groups: [
-          [
-            '똑같',
-            '같아',
-            '같은',
-            '고르',
-            '평평',
-            '나란',
-            '딱',
-            '꼭',
-            '남김\\s*없',
-            '남지',
-            '남는\\s*(칸|것)?\\s*(이|도)?\\s*없',
-            '모두\\s*5',
-            '다\\s*5',
-            '5가\\s*(돼|되)',
-          ],
-        ],
-      },
-      {
-        id: 'q3b_beam',
-        part: 'beam',
-        ask: '오른쪽 거리의 합과 왼쪽 거리의 합이 같으면 시소는 어떻게 되나요? 양쪽 추들이 시소를 기울게 하는 정도를 생각해 보세요.',
-        teacher: '양쪽 거리의 합이 같아 양쪽으로 기울게 하는 정도가 같다 → 시소가 평평해진다',
-        accept: '평평해진다, 기울지 않는다, 양쪽이 똑같이 기울게 해서 균형이 맞는다',
-        hint: 'SUM_BALANCE',
-        groups: [['평평', '수평', '균형', '기울지', '안\\s*기울', '반듯']],
-      },
-      {
-        id: 'q3b_link',
-        part: 'link',
-        ask: "넘친 칸의 합과 모자란 칸의 합이 같으면 왜 시소도 평평해질까요? '넘친 칸은 시소 그림에서 (\u00a0\u00a0\u00a0\u00a0)이고, 모자란 칸은 (\u00a0\u00a0\u00a0\u00a0)이니까 …'처럼 이어서 써 보세요.",
-        teacher:
-          '넘친 칸 = 받침점 오른쪽 추들의 거리, 모자란 칸 = 왼쪽 추들의 거리 → 두 칸의 합이 같으면 양쪽 거리의 합도 같아 시소가 평평해짐 (막대가 고르게 되는 것과 시소가 평평해지는 것은 같은 뜻)',
-        accept:
-          '넘친 칸은 오른쪽 거리이고 모자란 칸은 왼쪽 거리이니까 양쪽 거리의 합도 같아져서 평평해진다, 넘친 칸 = 오른쪽 거리이고 모자란 칸 = 왼쪽 거리라서',
-        hint: 'CELLS_TO_DISTANCE',
-        groups: [
-          ['넘', '모자', '칸'],
-          ['오른', '왼', '거리'],
-        ],
-      },
-    ],
-  },
-  {
-    id: 'q4',
+    id: 'change',
     label: '4',
-    prompt:
-      "오른쪽 위 '새로운 자료'에서 막대나 추를 놓아 나만의 자료를 만들어 보세요(평균이 자연수가 되게 만들면 쉬워요). 1~3번에서 한 것을 막대 그림과 시소 그림에서 각각 다시 확인해 보세요.",
-    modelAnswer:
-      '예) 내 자료 3, 5, 10의 평균은 6이다. [막대 그림] 초록색을 6에 두면 넘친 칸은 10-6=4칸, 모자란 칸은 (6-3)+(6-5)=4칸이다. ' +
-      '[시소 그림] 초록색을 6에 두면 시소가 평평해지고, 오른쪽 거리의 합 4와 왼쪽 거리의 합 3+1=4가 같다. ' +
-      '[이어 보기] 자료가 바뀌어도 평균에서 넘친 칸의 합과 모자란 칸의 합이 같고, 받침점을 평균에 두면 시소가 평평해진다.',
-    usesCustomData: true,
-    ideas: [
-      {
-        id: 'q4_bar',
-        part: 'bar',
-        ask: '내 자료와 평균을 쓰고, 초록색을 평균에 두었을 때 넘친 칸의 합과 모자란 칸의 합을 구해 보세요.',
-        teacher: '자신이 만든 자료와 평균, 넘친 칸의 합과 모자란 칸의 합을 수로 구함',
-        accept: '자료 3, 5, 10, 평균 6, 넘친 칸 4칸 모자란 칸 4칸',
-        hint: 'LEVELING',
-        groups: [['\\d'], ['넘', '모자', '칸', '합']],
-      },
-      {
-        id: 'q4_beam',
-        part: 'beam',
-        ask: '초록색을 평균에 두었을 때 시소가 어떻게 되는지 쓰고, 오른쪽 거리의 합과 왼쪽 거리의 합을 구해 보세요.',
-        teacher: '받침점을 평균에 두면 시소가 평평해짐, 양쪽 거리의 합을 수로 구함',
-        accept: '받침점 6에서 평평, 시소가 평평해진다, 오른쪽 거리 합 4 왼쪽 거리 합 4',
-        hint: 'MEAN_LINK',
-        groups: [['\\d'], ['평평', '수평', '받침', '거리', '왼', '오른']],
-      },
-      {
-        id: 'q4_link',
-        part: 'link',
-        ask: '처음 자료와 비교해 보세요. 자료가 바뀌어도 두 그림에서 똑같이 나타나는 것은 무엇인가요?',
-        teacher: '자료가 달라도 평균에서 넘친 칸의 합 = 모자란 칸의 합, 받침점을 평균에 두면 양쪽 거리의 합이 같아 시소가 평평 (항상 성립)',
-        accept: '이번에도 넘친 칸과 모자란 칸의 합이 같고 시소도 평균에서 평평해진다, 초록색을 평균에 두면 언제나 고르게 되고 평평해진다',
-        hint: 'SUM_BALANCE',
-        groups: [['같', '똑같', '일치', '성립', '항상', '역시', '마찬가지', '언제나', '평평', '수평', '평균']],
-      },
+    title: '자료를 바꾸어 시험하기',
+    prompt: '받침점은 5에 그대로 두세요. 자료 두 개를 바꾼 뒤에도 시소가 평평해지게 해 보세요. 바꾸기 전에 방법을 예상해 보세요.',
+    steps: [
+      { id: 'method', title: '바꾸기 전 예상', ask: '어떻게 바꾸면 시소가 계속 평평할까요? 바꾸기 전에 방법을 예상해 써 보세요.' },
+      { id: 'reflect', title: '해 본 뒤', ask: '예상한 방법과 같았나요? 해 보면서 알게 된 것을 써 보세요.' },
+    ],
+    goal: '받침점(5)을 고정한 채 자료를 바꾸며, 한쪽이 늘어난 만큼 다른 쪽을 줄여야 평평해진다(넘침 합 = 모자람 합 유지)는 관계를 시험하는지 본다.',
+    look: '바꾸기 전 방법 예상, 바꾼 자료(전후), 결과(평평한지), 늘린 만큼 줄이는 보상 관계를 말하는지.',
+    help: [
+      '어느 부분을 보고 그렇게 생각했나요?',
+      '자료 하나를 올리면 시소가 어느 쪽으로 기우는지 보고, 다른 자료로 되돌려 보세요.',
+      '칸 표시와 양쪽 거리의 합을 보여 줄게요. 양쪽을 비교해 보세요.',
+    ],
+  },
+  {
+    id: 'summary',
+    label: '5',
+    title: '발견한 관계 정리하기',
+    prompt: '막대 그림에서 알아낸 것으로 시소의 모습을 예상할 수 있었나요? 도움이 된 부분을 두 그림에 표시하고 설명해 보세요.',
+    steps: [{ id: 'explain', title: '설명', ask: '두 그림에서 표시한 부분이 어떻게 이어지는지 설명해 보세요.' }],
+    goal: '두 그림을 함께 설명할 기회. 처음 생각(1~4)과 최종 설명을 비교한다.',
+    look: '표시한 부분(막대·추)과 설명에서 자료값 대응, 기준과의 차이 대응, 대응을 예상의 근거로 쓰는지.',
+    help: [
+      '어느 부분을 보고 그렇게 생각했나요?',
+      '3번에서 예상이 맞았거나 틀렸던 까닭을 떠올려 보세요.',
+      '같은 자료 강조와 칸 표시를 켜고, 막대 그림이 시소 그림으로 바뀌는 모습을 보여 줄게요.',
     ],
   },
 ];
 
-export const QUESTION_BY_ID: Record<QuestionId, Question> = Object.fromEntries(
-  QUESTIONS.map((q) => [q.id, q])
-) as Record<QuestionId, Question>;
+export const TASK_BY_ID: Record<TaskId, TaskDef> = Object.fromEntries(TASKS.map((t) => [t.id, t])) as Record<TaskId, TaskDef>;
 
-export type Verdict = 'PASS' | 'PARTIAL' | 'RETRY';
+// ---------------------------------------------------------------------------
+// 계산: 평균과의 차이, 현재 기준(초록색)과의 차이, 시소의 모습
+// ---------------------------------------------------------------------------
+const EPS = 1e-9;
+export const meanOf = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 
-export interface EvalResult {
-  verdict: Verdict;
-  foundIdeaIds: string[];
-  missingIdeaIds: string[];
-  hints: HintRef[];
+// 시소의 모습: 기준 p에서 오른쪽(자료값 > p) 거리의 합과 왼쪽 거리의 합을 비교
+export function tiltAt(values: number[], p: number): Tilt {
+  const d = values.reduce((a, v) => a + (v - p), 0);
+  if (Math.abs(d) < EPS) return 'flat';
+  return d > 0 ? 'right' : 'left';
+}
+
+export function sidesAt(values: number[], p: number) {
+  const over = values.filter((v) => v > p + EPS).reduce((a, v) => a + (v - p), 0);
+  const under = values.filter((v) => v < p - EPS).reduce((a, v) => a + (p - v), 0);
+  return { over, under }; // over = 넘침 = 오른쪽 거리의 합, under = 모자람 = 왼쪽 거리의 합
+}
+
+// ---------------------------------------------------------------------------
+// 연결의 증거 분석 (교사용). AI가 없거나 실패하면 아래 규칙 분석을 '참고용'으로 쓴다.
+// ---------------------------------------------------------------------------
+export type EvidenceLevel = 'yes' | 'partial' | 'no' | 'na';
+export const EVIDENCE_LABEL: Record<EvidenceLevel, string> = { yes: '나타남', partial: '일부', no: '보이지 않음', na: '해당 없음' };
+
+export interface AnalysisInput {
+  taskId: TaskId;
+  step: string; // 응답한 칸 (observe, level, reason, reflect, predict, method, explain, match ...)
+  kind: 'first' | 'revised';
+  text: string; // 학생 글 (여러 칸이면 '[칸 이름] 글' 줄로 이어 붙임)
+  values: number[];
+  p: number; // 응답할 때 실제 초록색 위치
+  round?: number; // 다른 그림 예상하기의 기준 (4·5·6)
+  prediction?: Choice;
+  revealed?: boolean; // 결과(시소)를 본 뒤의 응답인지
+  picks?: { bars: number[]; weights: number[] }; // 학생이 표시한 막대·추 (자료 번호)
+  match?: { bar: number; weight: number };
+  before?: number[]; // 자료를 바꾸기 전 (자료 바꾸기)
+  supportsSeen?: string[]; // 응답 전에 실제로 본 도움·강조·애니메이션
+}
+
+export interface Analysis {
+  dataMatch: EvidenceLevel; // 자료값의 대응 (막대 하나 ↔ 추 하나, 같은 수)
+  deviationMatch: EvidenceLevel; // 기준값과의 차이 대응 (넘침·모자람 ↔ 오른쪽·왼쪽 거리)
+  usedAsEvidence: EvidenceLevel; // 그 대응을 예상·설명의 근거로 사용
+  evidence: string; // 판단 근거가 되는 학생의 말이나 표시
+  teacherCheck: boolean; // 교사 확인 필요
+  flags: string[];
   teacherLog: string;
-  misconception?: string;
+  suggestedSupport: string; // 다음에 줄 만한 도움 (교사용 제안, 자동으로 보여 주지 않음)
   source: 'ai' | 'rule';
 }
 
-// "시소 그림", "막대 그림"처럼 발문을 옮겨 적은 말 때문에 잘못 채점되지 않도록 지운다.
 export function normalizeAnswer(s: string) {
   return s
-    .replace(/(시소|균형점)\s*그림/g, ' ')
-    .replace(/막대\s*그림/g, ' ')
+    .replace(/(시소|균형점|막대)\s*그림/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// 너무 짧거나 문항·발문을 그대로 옮겨 적은 답
-export function isCopyOfPrompt(q: Question, idea: Idea, answer: string) {
-  const a = answer.replace(/\s+/g, '');
-  return a.length < 2 || q.prompt.replace(/\s+/g, '').includes(a) || idea.ask.replace(/\s+/g, '').includes(a);
-}
-
-// '모르겠어요', '몰라' 같은 짧은 답은 채점할 내용이 없는 것으로 본다
+// '모르겠어요', '몰라' 같은 짧은 답
 export function isDontKnow(answer: string) {
   const a = answer.replace(/\s+/g, '');
   return a.length <= 15 && /(모르|몰라|몰루|몰랑|글쎄|잘\s*모|패스|pass|\?{2,})/i.test(a);
 }
 
-// 비었거나, 모른다고 했거나, 발문을 옮겨 적은 칸은 채점하지 않는다
-export function isBlankPart(q: Question, idea: Idea, answer: string | undefined) {
-  const a = (answer ?? '').trim();
-  return !a || isDontKnow(a) || isCopyOfPrompt(q, idea, a);
-}
-
-// 기록·교사용 메모에 남길 한 줄 답: [막대 그림에서] … / [시소 그림에서] …
-export function joinAnswer(q: Question, parts: PartAnswers) {
-  return q.ideas
-    .map((i) => [i, (parts[i.id] ?? '').trim()] as const)
-    .filter(([, t]) => t)
-    .map(([i, t]) => `[${PART_TITLE[i.part]}] ${t}`)
-    .join('\n');
-}
-
-export function hintsForMissing(q: Question, missingIdeaIds: string[]): HintRef[] {
-  const seen = new Set<string>();
-  const out: HintRef[] = [];
-  for (const idea of q.ideas) {
-    if (!missingIdeaIds.includes(idea.id)) continue;
-    const k = `${idea.hint}:${idea.hintTarget ?? ''}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({ key: idea.hint, target: idea.hintTarget });
+// 대응 방향: 한 마디(절) 안에서 넘침·모자람이 오른쪽·왼쪽 중 어디와 함께 쓰였는지 본다.
+// 넘친 것을 왼쪽에, 모자란 것을 오른쪽에 이으면 '뒤집힘'으로 보고 교사 확인을 요청한다.
+const CLAUSE_SPLIT = /[.,!?\n;]|이고|이며|그리고|하고|지만|는데/;
+const OVER = /(넘|위로|높)/;
+const UNDER = /(모자|부족|아래로|낮)/;
+function mappingDirection(text: string) {
+  let forward = false;
+  let reversed = false;
+  for (const c of text.split(CLAUSE_SPLIT)) {
+    const right = /오른/.test(c);
+    const left = /왼/.test(c);
+    if (right === left) continue; // 한 절에 양쪽이 다 있거나 둘 다 없으면 판단하지 않음
+    const over = OVER.test(c);
+    const under = UNDER.test(c);
+    if (over === under) continue;
+    if ((over && right) || (under && left)) forward = true;
+    else reversed = true;
   }
-  return out;
+  return { forward, reversed };
 }
+const BAR_SIDE = /(넘|모자|부족|위로|아래로|높|낮|칸)/;
+const BEAM_SIDE = /(거리|떨어|오른|왼|받침|기울|내려)/;
+const SAME_VALUE = /(같은\s*(수|값|자리|위치|높이|눈금)|높이[^.,]{0,10}(자리|위치|눈금)|눈금|[0-9]\s*(에|자리|위치))/;
+const UP = '(올리|올려|늘리|늘려|더하|더해|크게|높이|높여)';
+const DOWN = '(내리|내려|줄이|줄여|빼|작게|낮추|낮춰)';
+const COMPENSATE = new RegExp(`(${UP}.{0,18}${DOWN}|${DOWN}.{0,18}${UP}|같은\\s*만큼|그만큼|똑같이\\s*(바꾸|움직))`);
+const COMPARE = /(넘|모자|부족|많|적|크|작|비교|무거|가벼)/;
 
-export function verdictFrom(q: Question, found: string[]): Verdict {
-  if (found.length >= q.ideas.length) return 'PASS';
-  if (found.length > 0) return 'PARTIAL';
-  return 'RETRY';
-}
+export function ruleAnalyze(input: AnalysisInput): Analysis {
+  const text = normalizeAnswer(input.text);
+  const flags: string[] = [];
+  const empty = !text || isDontKnow(text);
+  if (empty) flags.push('글 응답이 비었거나 “모르겠어요”');
 
-// 아이디어마다 그 칸에 쓴 답만 본다
-export function ruleEvaluate(q: Question, parts: PartAnswers): EvalResult {
-  const found = q.ideas
-    .filter((idea) => {
-      const raw = parts[idea.id];
-      if (isBlankPart(q, idea, raw)) return false;
-      const text = normalizeAnswer(raw ?? '');
-      return idea.groups.every((g) => g.some((pat) => new RegExp(pat).test(text)));
-    })
-    .map((i) => i.id);
-  const missing = q.ideas.map((i) => i.id).filter((id) => !found.includes(id));
-  const verdict = verdictFrom(q, found);
-  const foundDesc = q.ideas.filter((i) => found.includes(i.id)).map((i) => `[${PART_TITLE[i.part]}] ${i.teacher}`);
-  const missingDesc = q.ideas.filter((i) => missing.includes(i.id)).map((i) => `[${PART_TITLE[i.part]}] ${i.teacher}`);
+  const { forward, reversed } = mappingDirection(text);
+  if (reversed) flags.push('넘침·모자람과 오른쪽·왼쪽의 대응이 뒤집혔을 수 있음');
+
+  // 자료값의 대응
+  let dataMatch: EvidenceLevel = 'na';
+  const evidenceBits: string[] = [];
+  if (input.match) {
+    const vb = input.values[input.match.bar];
+    const vw = input.values[input.match.weight];
+    dataMatch = vb === vw ? 'yes' : 'no';
+    evidenceBits.push(`고른 막대 ${vb} ↔ 고른 추 ${vw}`);
+    if (vb !== vw) flags.push(`막대(${vb})와 다른 자료의 추(${vw})를 짝지음`);
+  } else if (input.taskId === 'match' || input.taskId === 'summary') {
+    dataMatch = SAME_VALUE.test(text) ? 'partial' : 'no';
+  } else if (SAME_VALUE.test(text)) {
+    dataMatch = 'partial';
+  }
+  if (input.picks && input.taskId === 'summary') {
+    const bv = input.picks.bars.map((i) => input.values[i]);
+    const wv = input.picks.weights.map((i) => input.values[i]);
+    if (bv.length && wv.length) {
+      evidenceBits.push(`표시한 막대 [${bv.join(', ')}] · 추 [${wv.join(', ')}]`);
+      if (bv.some((v) => wv.includes(v)) && dataMatch !== 'yes') dataMatch = 'partial';
+    }
+  }
+
+  // 기준값과의 차이 대응
+  let deviationMatch: EvidenceLevel = 'no';
+  if (forward && !reversed) deviationMatch = 'yes';
+  else if (BAR_SIDE.test(text) && BEAM_SIDE.test(text)) deviationMatch = 'partial';
+  if (input.taskId === 'match' && deviationMatch === 'no') deviationMatch = 'na';
+
+  // 그 대응을 근거로 사용
+  let usedAsEvidence: EvidenceLevel = 'na';
+  if (input.taskId === 'predict') {
+    const marked = (input.picks?.bars.length ?? 0) > 0;
+    if (input.prediction === 'unsure' || (!marked && !COMPARE.test(text))) usedAsEvidence = 'no';
+    else usedAsEvidence = marked && COMPARE.test(text) ? 'yes' : 'partial';
+    if (input.picks?.bars.length) evidenceBits.push(`예상 근거로 표시한 막대 [${input.picks.bars.map((i) => input.values[i]).join(', ')}]`);
+    if (input.prediction) evidenceBits.push(`예상: ${CHOICE_LABEL[input.prediction]} (기준 ${input.round ?? input.p}, 실제: ${CHOICE_LABEL[tiltAt(input.values, input.p)]})`);
+  } else if (input.taskId === 'change') {
+    usedAsEvidence = COMPENSATE.test(text) ? 'yes' : COMPARE.test(text) ? 'partial' : 'no';
+    if (input.before) evidenceBits.push(`바꾸기 전 [${input.before.join(', ')}] → 후 [${input.values.join(', ')}], 시소: ${CHOICE_LABEL[tiltAt(input.values, input.p)]}`);
+  } else if (input.taskId === 'summary') {
+    usedAsEvidence = /(예상|알\s*수|보면|보고)/.test(text) && COMPARE.test(text) ? 'partial' : 'no';
+  }
+
+  const quote = text.slice(0, 80);
+  if (quote) evidenceBits.unshift(`“${quote}${text.length > 80 ? '…' : ''}”`);
+
+  const teacherCheck = reversed || (input.taskId === 'match' && dataMatch === 'no') || (empty && input.step !== 'reason');
+  if (input.supportsSeen?.length) flags.push(`응답 전 본 도움: ${input.supportsSeen.map(supportLabel).join(', ')}`);
+
+  const suggestedSupport =
+    deviationMatch === 'no' && input.taskId !== 'match'
+      ? '도움 2(살펴볼 대상 제안): 초록 선 위로 넘친 부분과 아래로 모자란 부분을 두 그림에서 비교하게 하기'
+      : dataMatch === 'no'
+        ? '도움 2(살펴볼 대상 제안): 막대 높이의 수를 시소 눈금에서 찾게 하기'
+        : '추가 도움 없이 다음 탐구로';
+
   return {
-    verdict,
-    foundIdeaIds: found,
-    missingIdeaIds: missing,
-    hints: verdict === 'PASS' ? [] : hintsForMissing(q, missing),
-    teacherLog: `[규칙 채점] 충족: ${foundDesc.join(' / ') || '없음'} | 부족: ${missingDesc.join(' / ') || '없음'}`,
+    dataMatch,
+    deviationMatch,
+    usedAsEvidence,
+    evidence: evidenceBits.join(' / '),
+    teacherCheck,
+    flags,
+    teacherLog: `[규칙 분석·참고용] 자료값 대응 ${EVIDENCE_LABEL[dataMatch]}, 차이 대응 ${EVIDENCE_LABEL[deviationMatch]}, 근거로 사용 ${EVIDENCE_LABEL[usedAsEvidence]}.${
+      reversed ? ' 대응이 뒤집힌 표현이 있어 교사 확인이 필요합니다.' : ''
+    }`,
+    suggestedSupport,
     source: 'rule',
   };
 }

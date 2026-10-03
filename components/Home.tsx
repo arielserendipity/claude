@@ -1,6 +1,6 @@
 import React from 'react';
-import { Star, StarHalf, UserRound } from 'lucide-react';
-import { QUESTIONS, QuestionId } from '../lib/questions';
+import { CircleCheck, Star, UserRound } from 'lucide-react';
+import { TASKS, TaskId } from '../lib/questions';
 import { loadSession } from '../lib/storage';
 import { BEAM, MEAN, itemColor, itemStroke } from '../lib/palette';
 import { SolvedProblem } from '../types';
@@ -14,7 +14,8 @@ interface HomeProps {
 
 export function Home({ playerName, setPlayerName, solvedProblems, onOpen }: HomeProps) {
   const ready = playerName.trim().length > 0;
-  const a2 = ready ? loadSession<Partial<Record<QuestionId, { status: string }>>>(`avg_a2_${playerName.trim()}`, {}) : {};
+  // 활동 2는 판정 대신 탐구를 마쳤는지만 보여 준다
+  const a2Done = ready ? (loadSession<{ done?: Partial<Record<TaskId, boolean>> }>(`avg_a2_${playerName.trim()}`, {}).done ?? {}) : {};
   const bestLevel = solvedProblems.reduce((m, s) => Math.max(m, s.level), 0);
 
   return (
@@ -42,13 +43,14 @@ export function Home({ playerName, setPlayerName, solvedProblems, onOpen }: Home
             )}
           </ActivityCard>
           <ActivityCard n={2} disabled={!ready} onClick={() => onOpen(2)} illustration={<BarToScaleArt />}>
-            <span className="flex items-center gap-0.5">
-              {QUESTIONS.map((q) => {
-                const s = a2[q.id]?.status;
-                if (s === 'PASS') return <Star key={q.id} size={18} className="fill-amber-400 text-amber-500" />;
-                if (s === 'PARTIAL') return <StarHalf key={q.id} size={18} className="fill-amber-300 text-amber-500" />;
-                return <Star key={q.id} size={18} className="text-slate-300" />;
-              })}
+            <span className="flex items-center gap-1">
+              {TASKS.map((t) =>
+                a2Done[t.id] ? (
+                  <CircleCheck key={t.id} size={18} className="text-emerald-500" />
+                ) : (
+                  <span key={t.id} className="w-4 h-4 rounded-full border-2 border-slate-300" />
+                )
+              )}
             </span>
           </ActivityCard>
         </div>

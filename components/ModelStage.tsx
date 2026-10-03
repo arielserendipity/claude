@@ -63,11 +63,23 @@ interface ModelStageProps {
   onAddValue?: (v: number) => void;
   onRemoveValue?: (i: number) => void;
   hint: ActiveHint | null;
-  spotlight?: number | null; // 빛나게 할 자료값 (그 막대와 추)
+  // 같은 자료를 같은 색·이름표로 보여 주고, 하나를 누르면 짝을 함께 강조한다.
+  // 끄면 막대·추를 같은 중립색으로 그리고 짝 강조를 하지 않는다 (학생이 대응을 스스로 찾을 때).
+  pairCues?: boolean;
+  hideBalance?: boolean; // 시소 그림을 가린다 (예상한 뒤 공개)
+  lockP?: boolean; // 초록색(초록 선·받침점)을 끌어 옮기지 못하게
+  allowAddRemove?: boolean; // 막대·추를 더하거나 지울 수 있는지 (끄면 값만 바꿈)
+  // 학생이 막대·추를 각각 따로 골라 표시한다 (짝 강조 없이)
+  picks?: { bars: number[]; weights: number[] };
+  onPick?: (kind: 'bar' | 'weight', i: number) => void;
+  tiltScale?: number; // 시소가 기우는 정도 (0~1, 공개할 때 0→1로 움직임)
 }
 
+export type Picks = { bars: number[]; weights: number[] };
+
 export const MAX_ITEMS = 10;
-const SPOTLIGHT = '#facc15';
+const PICK = '#4f46e5';
+const NEUTRAL = { fill: '#cbd5e1', stroke: '#475569' };
 // 새 자료의 막대 높이·추 위치는 0부터 10(MAX_U)까지
 const MIN_V = 0;
 const clampV = (u: number) => Math.max(MIN_V, Math.min(MAX_U, Math.round(u)));
@@ -90,7 +102,13 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   onAddValue,
   onRemoveValue,
   hint,
-  spotlight = null,
+  pairCues = true,
+  hideBalance = false,
+  lockP = false,
+  allowAddRemove = true,
+  picks,
+  onPick,
+  tiltScale = 1,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -99,7 +117,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
 
   const mean = useMemo(() => (values.length ? sum(values) / values.length : NaN), [values]);
   // 새 자료 만들기: 막대 그림 끝에 '+' 자리를 하나 비워 둔다
-  const canAdd = editable && !!onAddValue && values.length < MAX_ITEMS;
+  const canAdd = editable && allowAddRemove && !!onAddValue && values.length < MAX_ITEMS;
   const extra = canAdd ? 1 : 0;
   const left = useMemo(() => makeLayout(SIDE_LEFT, values, extra), [values, extra]);
   const right = useMemo(() => makeLayout(SIDE_RIGHT, values, extra), [values, extra]);
@@ -116,16 +134,16 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     return { x: r.x, y: r.y };
   };
 
-  // 평균선/받침점은 0.5칸 단위로 움직이고, 실제 평균 가까이에서는 평균에 딱 붙는다.
+  // 초록색(초록 선·받침점)은 0.5칸 단위로 움직인다. 평균에 저절로 붙지 않는다 (학생의 판단을 그대로 남기기 위해).
   const snapP = (u: number) => {
     const c = Math.max(0, Math.min(MAX_U, u));
-    if (Math.abs(c - mean) < 0.2) return mean;
     return Math.round(c * 2) / 2;
   };
 
   const startDrag = (e: React.PointerEvent, kind: DragKind, L: Layout, index?: number) => {
     e.stopPropagation();
     e.preventDefault();
+    if ((kind === 'line' || kind === 'fulcrum') && lockP) return;
     movedRef.current = false;
     const from = kind === 'line' || kind === 'fulcrum' ? p : values[index ?? 0];
     lastRef.current = from;
@@ -168,11 +186,13 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag]);
 
-  const select = (i: number) => {
+  const select = (i: number, kind: 'bar' | 'weight') => {
     if (movedRef.current) {
       movedRef.current = false;
       return;
     }
+    if (onPick) return onPick(kind, i);
+    if (!pairCues) return; // 짝 강조는 짝을 보여 주는 도움이 켜졌을 때만
     onSelect(selected === i ? null : i);
   };
 
@@ -195,9 +215,13 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     p,
     mean,
     showCells,
-    selected,
+    selected: pairCues && !onPick ? selected : null,
     hint,
-    spotlight,
+    pairCues,
+    lockP,
+    allowAddRemove,
+    picks,
+    tiltScale,
     editable,
     canAdd,
     select,
@@ -223,7 +247,8 @@ export const ModelStage: React.FC<ModelStageProps> = ({
           <LinkBadge x={(SIDE_LEFT.x + SIDE_LEFT.w + SIDE_RIGHT.x) / 2} y={SIDE_LEFT.y + SIDE_LEFT.h / 2} />
           <ModelView L={left} t={0} {...common} />
           <ModelView L={right} t={1} {...common} />
-          <Connectors left={left} right={right} values={values} p={p} hint={hint} />
+          {!hideBalance && <Connectors left={left} right={right} values={values} p={p} hint={hint} />}
+          {hideBalance && <BalanceCover region={SIDE_RIGHT} />}
         </>
       ) : (
         <>
@@ -273,10 +298,14 @@ interface ModelViewProps {
   showCells: boolean;
   selected: number | null;
   hint: ActiveHint | null;
-  spotlight: number | null;
+  pairCues: boolean;
+  lockP: boolean;
+  allowAddRemove: boolean;
+  picks?: Picks;
+  tiltScale: number;
   editable: boolean;
   canAdd: boolean;
-  select: (i: number) => void;
+  select: (i: number, kind: 'bar' | 'weight') => void;
   startDrag: (e: React.PointerEvent, kind: DragKind, L: Layout, index?: number) => void;
   addBarAt: (e: React.PointerEvent, L: Layout) => void;
   addWeight: (v: number) => void;
@@ -292,7 +321,11 @@ function ModelView({
   showCells,
   selected,
   hint,
-  spotlight,
+  pairCues,
+  lockP,
+  allowAddRemove,
+  picks,
+  tiltScale,
   editable,
   canAdd,
   select,
@@ -311,7 +344,12 @@ function ModelView({
   const pivot = { x: L.bx + p * L.U1, y: L.beamY + BEAM_HALF };
   const baseY = pivot.y + 42;
   const arm = Math.max(pivot.x - (L.bx - 16), L.bx + MAX_U * L.U1 + 16 - pivot.x);
-  const tilt = tiltDegrees(mean, p, groundLimitDegrees(arm, baseY - pivot.y - 2)) * r2;
+  const tilt = tiltDegrees(mean, p, groundLimitDegrees(arm, baseY - pivot.y - 2)) * r2 * tiltScale;
+  // 같은 자료의 색·이름표는 짝을 보여 주는 도움이 켜졌을 때만
+  const fillOf = (i: number) => (pairCues ? itemColor(i) : NEUTRAL.fill);
+  const strokeOf = (i: number) => (pairCues ? itemStroke(i) : NEUTRAL.stroke);
+  const pickedBar = (i: number) => !!picks?.bars.includes(i);
+  const pickedWeight = (i: number) => !!picks?.weights.includes(i);
   const lateR = clamp01((r2 - 0.6) / 0.4);
   const early = 1 - clamp01(r1 * 1.6);
 
@@ -399,16 +437,17 @@ function ModelView({
           const labelI = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 24 }, { x: -20, y: 5 });
           return (
             <g key={`bar-${i}`} opacity={op(i)}>
-              {spotlight === v && lateR < 1 && (
-                // 애니메이션이 opacity를 덮어쓰므로, 막대가 추로 바뀌며 사라지는 정도는 바깥 g가 맡는다
+              {pickedBar(i) && lateR < 1 && (
+                // 학생이 고른 막대: 둘레에 보라색 테두리
                 <g opacity={1 - lateR} pointerEvents="none">
-                  <polygon points={polyPoints(pts)} fill="none" stroke={SPOTLIGHT} strokeWidth={12} strokeLinejoin="round" className="soft-pulse" />
+                  <polygon points={polyPoints(pts)} fill="none" stroke={PICK} strokeWidth={9} strokeLinejoin="round" />
                 </g>
               )}
               <polygon
+                data-bar={i}
                 points={polyPoints(pts)}
-                fill={itemColor(i)}
-                stroke={itemStroke(i)}
+                fill={fillOf(i)}
+                stroke={strokeOf(i)}
                 strokeWidth={selected === i ? 3.5 : 1.5}
                 strokeLinejoin="round"
                 opacity={1 - lateR}
@@ -417,14 +456,14 @@ function ModelView({
                 onPointerDown={canDrag ? (e) => startDrag(e, 'bar', L, i) : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
-                  select(i);
+                  select(i, 'bar');
                 }}
               />
               {v === 0 && lateR < 1 && (() => {
                 // 높이가 0인 막대도 보이도록 바닥에 굵은 선을 긋는다
                 const [a, b] = localLine(L, t, 0, i + g, i + g + f);
                 return (
-                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={itemStroke(i)} strokeWidth={6} strokeLinecap="round" opacity={1 - lateR} pointerEvents="none" />
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={strokeOf(i)} strokeWidth={6} strokeLinecap="round" opacity={1 - lateR} pointerEvents="none" />
                 );
               })()}
               {canDrag && (
@@ -436,7 +475,7 @@ function ModelView({
                   onPointerDown={(e) => startDrag(e, 'bar', L, i)}
                   onClick={(e) => {
                     e.stopPropagation();
-                    select(i);
+                    select(i, 'bar');
                   }}
                 />
               )}
@@ -449,12 +488,14 @@ function ModelView({
                 })}
               {canDrag && (
                 <g transform={`translate(${labelV.x},${labelV.y - 16})`} pointerEvents="none">
-                  <path d="M -6 0 L 0 -7 L 6 0 Z" fill={itemStroke(i)} />
+                  <path d="M -6 0 L 0 -7 L 6 0 Z" fill={strokeOf(i)} />
                 </g>
               )}
-              <text x={labelI.x} y={labelI.y} fontSize={15} textAnchor="middle" fill={itemStroke(i)} opacity={early} pointerEvents="none">
-                {itemLabel(i)}
-              </text>
+              {pairCues && (
+                <text x={labelI.x} y={labelI.y} fontSize={15} textAnchor="middle" fill={itemStroke(i)} opacity={early} pointerEvents="none">
+                  {itemLabel(i)}
+                </text>
+              )}
             </g>
           );
         })}
@@ -463,7 +504,7 @@ function ModelView({
         {canAdd && atBar && (
           <AddBarSlot L={L} slot={n} empty={n === 0} onPointerDown={(e) => addBarAt(e, L)} />
         )}
-        {editable && atBar && !hk &&
+        {editable && allowAddRemove && atBar && !hk &&
           values.map((_, i) => {
             const pos = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 46 }, { x: -20, y: 5 });
             return <DeleteButton key={`del-bar-${i}`} x={pos.x} y={pos.y} onClick={() => removeItem(i)} />;
@@ -487,33 +528,34 @@ function ModelView({
             return (
               <g
                 key={`w-${i}`}
+                data-weight={i}
                 opacity={lateR * op(i)}
                 style={{ cursor: canDrag ? 'ew-resize' : 'pointer' }}
                 onPointerDown={canDrag ? (e) => startDrag(e, 'weight', L, i) : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
-                  select(i);
+                  select(i, 'weight');
                 }}
               >
-                {spotlight === v && (
-                  <path d={d} fill="none" stroke={SPOTLIGHT} strokeWidth={11} strokeLinejoin="round" className="soft-pulse" pointerEvents="none" />
+                {pickedWeight(i) && <path d={d} fill="none" stroke={PICK} strokeWidth={9} strokeLinejoin="round" pointerEvents="none" />}
+                <circle cx={cx} cy={wr.y0 - 2} r={4.5} fill="none" stroke={strokeOf(i)} strokeWidth={2.5} />
+                <path d={d} fill={fillOf(i)} stroke={strokeOf(i)} strokeWidth={selected === i ? 3.5 : 1.5} strokeLinejoin="round" />
+                {pairCues && (
+                  <text x={cx} y={wr.y0 + h / 2 + 5} fontSize={Math.min(14, h * 0.62)} textAnchor="middle" fill="#1e293b" pointerEvents="none">
+                    {itemLabel(i)}
+                  </text>
                 )}
-                <circle cx={cx} cy={wr.y0 - 2} r={4.5} fill="none" stroke={itemStroke(i)} strokeWidth={2.5} />
-                <path d={d} fill={itemColor(i)} stroke={itemStroke(i)} strokeWidth={selected === i ? 3.5 : 1.5} strokeLinejoin="round" />
-                <text x={cx} y={wr.y0 + h / 2 + 5} fontSize={Math.min(14, h * 0.62)} textAnchor="middle" fill="#1e293b" pointerEvents="none">
-                  {itemLabel(i)}
-                </text>
                 {canDrag && (
                   <>
-                    <path d={`M ${x0 - 3} ${(wr.y0 + wr.y1) / 2} l -6 -5 l 0 10 z`} fill={itemStroke(i)} />
-                    <path d={`M ${x1 + 3} ${(wr.y0 + wr.y1) / 2} l 6 -5 l 0 10 z`} fill={itemStroke(i)} />
+                    <path d={`M ${x0 - 3} ${(wr.y0 + wr.y1) / 2} l -6 -5 l 0 10 z`} fill={strokeOf(i)} />
+                    <path d={`M ${x1 + 3} ${(wr.y0 + wr.y1) / 2} l 6 -5 l 0 10 z`} fill={strokeOf(i)} />
                   </>
                 )}
               </g>
             );
           })}
 
-        {editable && atBalance && !hk && selected != null && selected < values.length && (() => {
+        {editable && allowAddRemove && atBalance && !hk && selected != null && selected < values.length && (() => {
           const wr = weightRect(L, selected, values[selected]);
           return (
             <DeleteButton
@@ -524,7 +566,7 @@ function ModelView({
           );
         })()}
 
-        {/* 평균선보다 넘친 칸(주황) / 모자란 칸(파랑) → 추와 받침점 사이 거리 */}
+        {/* 초록 선보다 넘친 칸(주황) / 모자란 칸(파랑) → 추와 받침점 사이 거리 */}
         {!leveling &&
           values.map((v, i) => {
             if (Math.abs(v - p) < 1e-9 || !segOn(i)) return null;
@@ -596,19 +638,19 @@ function ModelView({
             );
           })}
 
-        {leveling && <LevelingOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
+        {leveling && <LevelingOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} fillOf={fillOf} />}
       </g>
 
       {sumStrips && <SumStripsOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
 
-      {/* 평균선 (막대 그림) */}
+      {/* 초록 선 (막대 그림의 기준선) */}
       {r2 < 1 && (
         <g opacity={1 - r2}>
           {hk === 'MEAN_LINK' && (
             <line x1={meanLine[0].x} y1={meanLine[0].y} x2={meanLine[1].x} y2={meanLine[1].y} stroke={MEAN.strong} strokeLinecap="round" className="glow-line" pointerEvents="none" />
           )}
           <line x1={meanLine[0].x} y1={meanLine[0].y} x2={meanLine[1].x} y2={meanLine[1].y} stroke={MEAN.stroke} strokeWidth={4} strokeLinecap="round" pointerEvents="none" />
-          {atBar && (
+          {atBar && !lockP && (
             <line
               x1={meanLine[0].x}
               y1={meanLine[0].y}
@@ -623,8 +665,8 @@ function ModelView({
           )}
           <g
             transform={`translate(${handle.x},${handle.y})`}
-            style={{ cursor: atBar ? 'ns-resize' : 'default' }}
-            onPointerDown={atBar ? (e) => startDrag(e, 'line', L) : undefined}
+            style={{ cursor: atBar && !lockP ? 'ns-resize' : 'default' }}
+            onPointerDown={atBar && !lockP ? (e) => startDrag(e, 'line', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
             {hk === 'MEAN_LINK' && <circle r={27} fill={MEAN.strong} opacity={0.35} className="hint-pulse" />}
@@ -632,7 +674,7 @@ function ModelView({
             <text y={6} textAnchor="middle" fontSize={16} fill="#fff">
               {fmt(p)}
             </text>
-            {atBar && (
+            {atBar && !lockP && (
               <>
                 <path d="M -6 -23 L 0 -30 L 6 -23 Z" fill={MEAN.stroke} />
                 <path d="M -6 23 L 0 30 L 6 23 Z" fill={MEAN.stroke} />
@@ -648,8 +690,8 @@ function ModelView({
           <line x1={L.region.x + 14} x2={L.region.x + L.region.w - 14} y1={baseY} y2={baseY} stroke="#cbd5e1" strokeWidth={3} strokeLinecap="round" pointerEvents="none" />
           <g
             transform={`translate(${pivot.x},${pivot.y}) scale(${Math.max(0.01, r2)})`}
-            style={{ cursor: atBalance ? 'ew-resize' : 'default' }}
-            onPointerDown={atBalance ? (e) => startDrag(e, 'fulcrum', L) : undefined}
+            style={{ cursor: atBalance && !lockP ? 'ew-resize' : 'default' }}
+            onPointerDown={atBalance && !lockP ? (e) => startDrag(e, 'fulcrum', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
             {hk === 'MEAN_LINK' && <circle cy={24} r={34} fill={MEAN.strong} opacity={0.35} className="hint-pulse" />}
@@ -658,16 +700,16 @@ function ModelView({
           </g>
           <g
             transform={`translate(${pivot.x},${baseY + 22})`}
-            style={{ cursor: atBalance ? 'ew-resize' : 'default' }}
-            onPointerDown={atBalance ? (e) => startDrag(e, 'fulcrum', L) : undefined}
+            style={{ cursor: atBalance && !lockP ? 'ew-resize' : 'default' }}
+            onPointerDown={atBalance && !lockP ? (e) => startDrag(e, 'fulcrum', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 평균선 손잡이와 같은 초록 동그라미: 두 그림의 '초록색'이 같은 것임을 보여 준다 */}
+            {/* 초록 선 손잡이와 같은 초록 동그라미: 두 그림의 '초록색'이 같은 것임을 보여 준다 */}
             <circle r={18} fill={MEAN.stroke} stroke="#fff" strokeWidth={3} />
             <text y={6} textAnchor="middle" fontSize={16} fill="#fff">
               {fmt(p)}
             </text>
-            {atBalance && (
+            {atBalance && !lockP && (
               <>
                 <path d="M -23 -6 L -30 0 L -23 6 Z" fill={MEAN.stroke} />
                 <path d="M 23 -6 L 30 0 L 23 6 Z" fill={MEAN.stroke} />
@@ -681,7 +723,7 @@ function ModelView({
 }
 
 // 넘친 칸이 날아가 모자란 칸을 채우는 애니메이션 (막대 그림)
-function LevelingOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
+function LevelingOverlay({ L, values, p, nonce, fillOf }: { L: Layout; values: number[]; p: number; nonce: number; fillOf: (i: number) => string }) {
   const g = L.barGap;
   const f = L.barFrac;
   const X = (i: number) => L.O0.x + (i + g) * L.S0;
@@ -713,7 +755,7 @@ function LevelingOverlay({ L, values, p, nonce }: { L: Layout; values: number[];
             width={w}
             height={h}
             rx={3}
-            fill={itemColor(c.i)}
+            fill={fillOf(c.i)}
             stroke={EXCESS.stroke}
             strokeWidth={2.5}
             initial={{ x: 0, y: 0 }}
@@ -790,6 +832,27 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
           </g>
         );
       })}
+    </g>
+  );
+}
+
+// 예상하기: 시소 그림을 가려 둔다 (평평하게 고정된 시소를 보여 주면 이미 균형을 이룬 것으로 오해할 수 있어 아예 덮는다)
+function BalanceCover({ region }: { region: Region }) {
+  const cx = region.x + region.w / 2;
+  const cy = region.y + region.h / 2;
+  return (
+    <g onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+      <rect x={region.x} y={region.y} width={region.w} height={region.h} rx={24} fill="#f1f5f9" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="10 8" />
+      <circle cx={cx} cy={cy - 40} r={44} fill="#e2e8f0" />
+      <text x={cx} y={cy - 22} fontSize={56} textAnchor="middle" fill="#94a3b8">
+        ?
+      </text>
+      <text x={cx} y={cy + 44} fontSize={22} textAnchor="middle" fill="#64748b">
+        시소 그림은 잠깐 가려 두었어요
+      </text>
+      <text x={cx} y={cy + 76} fontSize={18} textAnchor="middle" fill="#94a3b8">
+        예상한 뒤 ‘확인하기’를 누르면 보여요
+      </text>
     </g>
   );
 }
