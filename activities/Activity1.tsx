@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import { ArrowRight, Flag, Lightbulb, Play, RotateCcw, Scale, SkipForward, Star, Trophy } from 'lucide-react';
 import { BalanceBeamStage } from '../components/BalanceBeamStage';
 import { AddLog, AppState, Block, DragLog, SolvedProblem, TeacherNote } from '../types';
-import { generateNewBlocks } from '../lib/levelGen';
+import { generateNewBlocks, startFulcrum } from '../lib/levelGen';
 import { analyzeActivity1 } from '../lib/activity1Rules';
 
 interface Activity1Props {
@@ -53,9 +53,11 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
     setIsHintActive(false);
     setLevelAttempts(1);
     setCurrentLevelLogs([]);
-    setFulcrumPosition(5.5);
     nextLevelParamsRef.current = { blocksToAdd: 1, forceInteger: true };
-    setBlocks(generateNewBlocks([], 2, true));
+    const first = generateNewBlocks([], 2, true);
+    setBlocks(first);
+    // 받침점은 균형점에서 1칸 이상 떨어진 곳에서 시작한다
+    setFulcrumPosition(startFulcrum(5.5, first.reduce((a, b) => a + b.position, 0) / first.length));
     levelStartTimeRef.current = Date.now();
     setAppState('PLAYING');
     addLog('START_GAME', 'Level 1 started with 2 weights', { activity: 'A1', level: 1, failCount: 0 });
@@ -154,10 +156,13 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
     setIsHintActive(false);
     setLevelAttempts(1);
     setCurrentLevelLogs([]);
-    setBlocks((prev) => {
-      const oldBlocks = prev.map((b) => ({ ...b, isNew: false }));
-      return [...oldBlocks, ...generateNewBlocks(oldBlocks, params.blocksToAdd, params.forceInteger)];
-    });
+    const oldBlocks = blocks.map((b) => ({ ...b, isNew: false }));
+    const nextBlocks = [...oldBlocks, ...generateNewBlocks(oldBlocks, params.blocksToAdd, params.forceInteger)];
+    setBlocks(nextBlocks);
+    // 새 균형점이 지금 받침점과 1칸도 안 떨어져 있으면(이전 정답과 같거나 가까우면) 받침점을 멀리 옮겨 놓고 시작한다
+    const nextMean = nextBlocks.reduce((a, b) => a + b.position, 0) / nextBlocks.length;
+    const start = startFulcrum(fulcrumPosition, nextMean);
+    if (start !== fulcrumPosition) setFulcrumPosition(start);
     levelStartTimeRef.current = Date.now();
     setAppState('PLAYING');
     addLog('NEXT_LEVEL', `Level ${level + 1} started.`, { activity: 'A1', level: level + 1, failCount: 0 });
