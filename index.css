@@ -116,6 +116,24 @@ body {
   animation: attention 1.6s ease-in-out infinite;
 }
 
+/* 틀린 뒤 새로 나타난 도움: 두 번만 깜빡여 눈에 띄게 */
+@keyframes help-in {
+  0% {
+    opacity: 0.4;
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55);
+  }
+  60% {
+    opacity: 1;
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+.help-in {
+  animation: help-in 0.9s ease-out 2;
+}
+
 /* 새 자료 만들기: 누를 수 있는 점선 자리 */
 .ghost {
   opacity: 0.55;
@@ -145,6 +163,7 @@ body {
   .attention,
   .ring-pulse,
   .soft-pulse,
+  .help-in,
   .animate-float {
     animation-duration: 3s;
   }

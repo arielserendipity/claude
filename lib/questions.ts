@@ -67,7 +67,7 @@ export interface TaskDef {
   steps: TaskStep[]; // 글로 쓰는 칸 (예상 고르기는 화면에서 따로 받음)
   goal: string; // 교사용: 무엇을 보려는 활동인지 (근거 연구)
   look: string; // 교사용: 반응에서 살펴볼 것
-  help: [string, string, string]; // 도움 1(탐색 질문)·2(대상 제안)·3(대응 보여 주기 설명)
+  help: [string, string, string]; // 틀릴 때마다 한 단계씩: 도움 1(탐색 질문)·2(대상 제안)·3(대응 보여 주기 설명)
 }
 
 // 설계 근거 (README '활동 2 설계 근거' 참고)
@@ -125,29 +125,11 @@ export const TASKS: TaskDef[] = [
     ],
   },
   {
-    id: 'change',
-    label: '3',
-    title: '자료를 바꾸어 시험하기',
-    prompt: '받침점은 5에 그대로 두세요. 자료 두 개를 바꾼 뒤에도 시소가 평평하게 해 보세요. 바꾸기 전에 방법을 예상해 보세요.',
-    steps: [
-      { id: 'method', title: '바꾸기 전 예상', ask: '어떻게 바꾸면 시소가 계속 평평할까요? 바꾸기 전에 방법을 예상해 써 보세요.' },
-      { id: 'reflect', title: '해 본 뒤', ask: '예상한 방법과 같았나요? 평평하게 하는 다른 방법도 찾아보고, 알게 된 것을 써 보세요.' },
-    ],
-    goal:
-      "받침점(5)을 고정한 채 두 자료를 바꾸며 시소가 평평한 상태를 지키는 방법을 시험한다(O'Dell 2012의 '균형을 지키며 옮기기', Van de Walle 외의 '평균이 같은 다른 자료 찾기'). 한쪽을 늘린 만큼 다른 쪽을 줄이면 넘침의 합 = 모자람의 합이 그대로다.",
-    look: '바꾸기 전 방법 예상, 바꾼 자료(전후)와 결과(평평한지), 여러 방법을 찾았는지, 늘린 만큼 줄이는 보상 관계를 말하는지.',
-    help: [
-      '어느 부분을 보고 그렇게 생각했나요?',
-      '자료 하나를 올리면 시소가 어느 쪽으로 기우는지 보고, 다른 자료로 되돌려 보세요.',
-      '칸 표시와 양쪽 거리의 합을 보여 줄게요. 양쪽을 비교해 보세요.',
-    ],
-  },
-  {
     id: 'custom',
-    label: '4',
+    label: '3',
     title: '나만의 자료로 확인하기',
     prompt:
-      "그림 위 '새로운 자료'를 눌러 막대나 추를 놓아 나만의 자료를 만들어 보세요(활동 1에서 푼 문제를 불러와도 되고, 평균이 자연수가 되게 만들면 쉬워요). 1~3번에서 알아낸 것을 막대 그림과 시소 그림에서 각각 다시 확인해 보세요.",
+      "그림 위 '새로운 자료'를 눌러 막대나 추를 놓아 나만의 자료를 만들어 보세요(활동 1에서 푼 문제를 불러와도 되고, 평균이 자연수가 되게 만들면 쉬워요). 1·2번에서 알아낸 것을 막대 그림과 시소 그림에서 각각 다시 확인해 보세요.",
     steps: [
       { id: 'bar', title: '막대 그림에서', ask: '내 자료와 평균을 쓰고, 초록색을 평균에 두었을 때 넘친 칸의 합과 모자란 칸의 합을 구해 보세요.' },
       { id: 'beam', title: '시소 그림에서', ask: '초록색을 평균에 두었을 때 시소가 어떻게 되는지 쓰고, 오른쪽 거리의 합과 왼쪽 거리의 합을 구해 보세요.' },
@@ -161,6 +143,24 @@ export const TASKS: TaskDef[] = [
       '내 자료의 평균은 얼마인가요? 초록색을 그곳에 두면 두 그림이 어떻게 되나요?',
       "'칸' 단추를 눌러 넘친 칸과 모자란 칸, 오른쪽 거리와 왼쪽 거리를 세어 보세요.",
       '칸 표시와 양쪽 거리의 합을 보여 줄게요. 처음 자료에서도 비교해 보세요.',
+    ],
+  },
+  {
+    id: 'change',
+    label: '4',
+    title: '자료를 바꾸어 시험하기',
+    prompt: '받침점은 5에 그대로 두세요. 자료 두 개를 바꾼 뒤에도 시소가 평평하게 해 보세요. 바꾸기 전에 방법을 예상해 보세요.',
+    steps: [
+      { id: 'method', title: '바꾸기 전 예상', ask: '어떻게 바꾸면 시소가 계속 평평할까요? 바꾸기 전에 방법을 예상해 써 보세요.' },
+      { id: 'reflect', title: '해 본 뒤', ask: '예상한 방법과 같았나요? 평평하게 하는 다른 방법도 찾아보고, 알게 된 것을 써 보세요.' },
+    ],
+    goal:
+      "받침점(5)을 고정한 채 두 자료를 바꾸며 시소가 평평한 상태를 지키는 방법을 시험한다(O'Dell 2012의 '균형을 지키며 옮기기', Van de Walle 외의 '평균이 같은 다른 자료 찾기'). 한쪽을 늘린 만큼 다른 쪽을 줄이면 넘침의 합 = 모자람의 합이 그대로다.",
+    look: '바꾸기 전 방법 예상, 바꾼 자료(전후)와 결과(평평한지), 여러 방법을 찾았는지, 늘린 만큼 줄이는 보상 관계를 말하는지.',
+    help: [
+      '시소가 어느 쪽으로 기울었나요? 어느 자료를 바꾸어서 그렇게 되었을까요?',
+      '자료 하나를 올리면 시소가 어느 쪽으로 기우는지 보고, 다른 자료로 되돌려 보세요.',
+      '칸 표시와 양쪽 거리의 합을 보여 줄게요. 양쪽을 비교해 보세요.',
     ],
   },
 ];
@@ -194,6 +194,26 @@ export const barSidesAt = (values: number[], p: number): BarSides => TILT_TO_SID
 // 예상하기에서 확인했을 때 보이는 결과
 export const outcomeAt = (task: PredictTaskId, values: number[], p: number): Prediction =>
   task === 'predictSeesaw' ? tiltAt(values, p) : barSidesAt(values, p);
+
+// 3번 나만의 자료: 수를 구하는 칸(막대 그림에서·시소 그림에서)에 꼭 있어야 할 것이 빠졌는지 본다.
+// 빠진 것이 있으면 '틀림'으로 보고 도움을 한 단계 올린다(학생에게 판정을 보여 주지는 않음).
+// '두 그림을 이어 보면'은 설명하는 칸이라 보지 않는다.
+const fmtNum = (x: number) => String(parseFloat(x.toFixed(2)));
+const hasNumber = (text: string, x: number) => new RegExp(`(^|[^0-9.])${fmtNum(x).replace('.', '\\.')}(?![0-9])`).test(text);
+export function customMissing(step: string, values: number[], text: string): string[] {
+  if (values.length < 2) return [];
+  const m = meanOf(values);
+  const { over } = sidesAt(values, m);
+  const missing: string[] = [];
+  if (step === 'bar') {
+    if (!hasNumber(text, m)) missing.push(`평균 ${fmtNum(m)}`);
+    if (over > EPS && !hasNumber(text, over)) missing.push(`넘친 칸·모자란 칸의 합 ${fmtNum(over)}`);
+  } else if (step === 'beam') {
+    if (!/(평평|수평|균형|기울지|안\s*기울)/.test(text)) missing.push('평균에서 시소가 평평함');
+    if (over > EPS && !hasNumber(text, over)) missing.push(`오른쪽·왼쪽 거리의 합 ${fmtNum(over)}`);
+  }
+  return missing;
+}
 
 // ---------------------------------------------------------------------------
 // 연결의 증거 분석 (교사용). AI가 없거나 실패하면 아래 규칙 분석을 '참고용'으로 쓴다.
@@ -317,7 +337,8 @@ export function ruleAnalyze(input: AnalysisInput): Analysis {
     if (input.step === 'bar' || input.step === 'beam') {
       if (deviationMatch === 'no') deviationMatch = 'na'; // 한 그림에서 수를 구하는 칸
       if (!Number.isInteger(m)) flags.push('평균이 자연수가 아닌 자료');
-      if (text && !text.includes(r(m))) flags.push(`글에 평균(${r(m)})이 보이지 않음`);
+      const missing = customMissing(input.step, input.values, text);
+      if (missing.length) flags.push(`빠진 것: ${missing.join(', ')}`);
     }
   }
 

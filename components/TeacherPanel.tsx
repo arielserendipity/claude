@@ -161,7 +161,8 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
               <div className="text-xs text-slate-500 pt-1 leading-relaxed">
                 활동 2에서 학생에게는 판정(별·통과)이 보이지 않습니다. 학생은 생각 저장하기 · 확인하기 · 생각 수정하기 · 다음 탐구로 진행하고,
                 다음 탐구는 할 일을 마치면 열립니다. AI는 아래 기록에서 두 그림 연결의 증거(자료값 대응 · 차이 대응 · 근거로 사용)를 교사에게만 보고합니다.
-                도움은 학생이 ‘도움’을 누를 때 한 단계씩({[1, 2, 3, 4].map((k) => SUPPORT_LEVEL_LABEL[k as 1 | 2 | 3 | 4]).join(' → ')}) 제공되고, 시점과 종류가 기록됩니다.
+                도움은 학생이 틀릴 때마다 한 단계씩({[1, 2, 3, 4].map((k) => SUPPORT_LEVEL_LABEL[k as 1 | 2 | 3 | 4]).join(' → ')}) 나타나고, 시점·종류·계기가 기록됩니다.
+                틀림으로 보는 경우: 1·2번 예상이 결과와 다를 때(‘아직 모르겠어요’ 포함), 3번 ‘막대 그림에서’·‘시소 그림에서’에 평균이나 합이 빠졌을 때, 4번 바꾼 자료에서 시소가 기울 때.
               </div>
             </section>
 
@@ -200,7 +201,7 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
               {showRubric && (
                 <div className="px-4 pb-4 space-y-4">
                   <div className="text-xs text-slate-500">
-                    1·3번 자료: 2, 3, 4, 4, 6, 7, 9 (평균 5). 초록색 4: 넘침 10 · 모자람 3 / 5: 7 · 7 / 6: 4 · 11.
+                    1번·4번 자료(3번의 ‘처음 자료’): 2, 3, 4, 4, 6, 7, 9 (평균 5). 초록색 4: 넘침 10 · 모자람 3 / 5: 7 · 7 / 6: 4 · 11.
                     <br />
                     2번 자료: 3, 4, 5, 8, 10 (평균 6). 초록색 4: 넘침 11 · 모자람 1 / 6: 6 · 6 / 7: 4 · 9. 초록 선(기준선)·받침점은 평균이 아닌 곳에도 놓일 수 있습니다.
                     <br />
