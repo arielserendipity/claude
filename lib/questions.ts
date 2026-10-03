@@ -83,7 +83,7 @@ export const TASKS: TaskDef[] = [
     title: '시소 그림 예상하기',
     prompt: '시소 그림을 잠깐 가릴게요. 초록색이 {p}에 있을 때 시소가 어떻게 될지 막대 그림을 보고 예상해 보세요.',
     steps: [
-      { id: 'reason', title: '까닭 (쓰고 싶으면)', ask: '그렇게 예상한 까닭이 있으면 짧게 써 보세요.' },
+      { id: 'reason', title: '까닭', ask: '그렇게 예상한 까닭을 써 보세요.' },
       {
         id: 'reflect',
         title: '세 번 해 본 뒤',
@@ -107,7 +107,7 @@ export const TASKS: TaskDef[] = [
     prompt:
       '이번에는 새 자료예요. 막대 그림을 잠깐 가릴게요. 초록색이 {p}에 있을 때 시소 그림을 보고, 막대 그림에서 초록 선 위로 넘친 부분과 초록 선까지 모자란 부분 중 어느 쪽이 더 많을지 예상해 보세요.',
     steps: [
-      { id: 'reason', title: '까닭 (쓰고 싶으면)', ask: '그렇게 예상한 까닭이 있으면 짧게 써 보세요.' },
+      { id: 'reason', title: '까닭', ask: '그렇게 예상한 까닭을 써 보세요.' },
       {
         id: 'reflect',
         title: '세 번 해 본 뒤',
@@ -275,8 +275,7 @@ export function ruleAnalyze(input: AnalysisInput): Analysis {
   const text = normalizeAnswer(input.text.replace(/^\[예상\].*$/gm, ''));
   const flags: string[] = [];
   const empty = !text || isDontKnow(text);
-  const optional = input.step === 'predict' || input.step === 'reason'; // 예상의 까닭은 쓰고 싶을 때만
-  if (empty && !optional) flags.push('글 응답이 비었거나 “모르겠어요”');
+  if (empty) flags.push(input.step === 'predict' ? '예상의 까닭이 비었거나 “모르겠어요”' : '글 응답이 비었거나 “모르겠어요”');
 
   const { forward, reversed } = mappingDirection(text);
   if (reversed) flags.push('넘침·모자람과 오른쪽·왼쪽의 대응이 뒤집혔을 수 있음');
@@ -290,13 +289,12 @@ export function ruleAnalyze(input: AnalysisInput): Analysis {
   let deviationMatch: EvidenceLevel = 'no';
   if (forward && !reversed) deviationMatch = 'yes';
   else if (BAR_SIDE.test(text) && BEAM_SIDE.test(text)) deviationMatch = 'partial';
-  if (empty && optional) deviationMatch = 'na';
 
   // 그 대응을 근거로 사용
   let usedAsEvidence: EvidenceLevel = 'na';
   if (isPredictTask(input.taskId)) {
     const bothSides = BAR_SIDE.test(text) && BEAM_SIDE.test(text);
-    if (input.prediction === 'unsure' || empty) usedAsEvidence = empty && optional && input.prediction !== 'unsure' ? 'na' : 'no';
+    if (input.prediction === 'unsure' || empty) usedAsEvidence = 'no';
     else usedAsEvidence = COMPARE.test(text) && (bothSides || forward) ? 'yes' : COMPARE.test(text) ? 'partial' : 'no';
     if (input.history?.length) {
       evidenceBits.push(
@@ -326,7 +324,7 @@ export function ruleAnalyze(input: AnalysisInput): Analysis {
   const quote = text.slice(0, 80);
   if (quote) evidenceBits.unshift(`“${quote}${text.length > 80 ? '…' : ''}”`);
 
-  const teacherCheck = reversed || (empty && !optional);
+  const teacherCheck = reversed || empty;
   if (input.supportsSeen?.length) flags.push(`응답 전 본 도움: ${input.supportsSeen.map(supportLabel).join(', ')}`);
 
   const suggestedSupport =

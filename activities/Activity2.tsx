@@ -465,6 +465,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (!isPredictTask(openId) || round == null || !rs?.prediction) return;
     const key = `${openId}.reason.${round}`;
     const text = (st.drafts[key] ?? '').trim();
+    if (!text) return; // 까닭은 꼭 쓴다
     const at = now();
     setRound(openId, round, { predictionSaved: true, predictionAt: at });
     patch((s) => ({ saved: { ...s.saved, [key]: { first: text, latest: text, firstAt: at, revisions: 0 } } }));
@@ -611,6 +612,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (round == null || !rs) return null;
     const set = PREDICT[id];
     const reasonKey = `${id}.reason.${round}`;
+    const reasonStep = t.steps.find((x) => x.id === 'reason')!;
+    const reasonText = (st.drafts[reasonKey] ?? '').trim();
     const choices: Prediction[] = id === 'predictSeesaw' ? SEESAW_CHOICES : BAR_CHOICES;
     const actual = outcomeAt(id, set.values, round);
     const last = roundIdx === set.rounds.length - 1;
@@ -633,22 +636,27 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         </div>
         {!rs.predictionSaved ? (
           <>
-            <textarea
-              value={st.drafts[reasonKey] ?? ''}
-              onChange={(e) => setDraft(reasonKey, e.target.value)}
-              rows={2}
-              maxLength={600}
-              placeholder="까닭 (쓰고 싶으면)"
-              className="w-full rounded-lg border-2 border-slate-200 bg-white focus:border-indigo-400 outline-none px-3 py-2 text-[16px]"
-            />
-            <ActionButton onClick={savePrediction} disabled={!rs.prediction} icon={<Save size={18} />}>
+            <div className="rounded-xl border-2 border-slate-200 bg-slate-50/60 px-3 pt-2 pb-2.5 flex flex-col gap-1.5">
+              <span className="font-korean text-sm text-slate-500">{reasonStep.title}</span>
+              <p className="font-korean text-[15px] leading-snug text-slate-800">{reasonStep.ask}</p>
+              <textarea
+                value={st.drafts[reasonKey] ?? ''}
+                onChange={(e) => setDraft(reasonKey, e.target.value)}
+                rows={2}
+                maxLength={600}
+                placeholder={rs.prediction === 'unsure' ? '어디까지 생각했는지, 무엇이 헷갈리는지 써 보세요' : '✏️'}
+                className="w-full rounded-lg border-2 border-slate-200 bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none px-3 py-2 text-[16px] leading-relaxed resize-y"
+              />
+            </div>
+            <ActionButton onClick={savePrediction} disabled={!rs.prediction || !reasonText} icon={<Save size={18} />}>
               예상 저장하기
             </ActionButton>
+            {rs.prediction && !reasonText && <span className="font-korean text-sm text-slate-500 -mt-1">예상과 까닭을 함께 써야 저장할 수 있어요.</span>}
           </>
         ) : (
           <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 font-korean text-[15px] text-slate-700 flex items-center gap-2 flex-wrap">
             <CircleCheck size={18} className="text-emerald-500" /> 내 예상: <b>{rs.prediction && predictionLabel(rs.prediction)}</b>
-            {st.saved[reasonKey]?.latest && <span className="text-slate-500">— {st.saved[reasonKey].latest}</span>}
+            <span className="text-slate-500">— {st.saved[reasonKey]?.latest}</span>
           </div>
         )}
         {rs.predictionSaved && !rs.revealed && (
