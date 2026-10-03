@@ -173,7 +173,7 @@ function App() {
 
       {visited.A2 && name && (
         <div className={screen === 'ACTIVITY2' ? 'flex-1 min-h-0 flex' : 'hidden'}>
-          <Activity2 key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} a1Supports={a1Supports} />
+          <Activity2 key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} a1Supports={a1Supports} solvedProblems={solved} />
         </div>
       )}
 

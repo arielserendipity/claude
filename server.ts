@@ -7,13 +7,19 @@ import { z } from 'zod';
 import {
   Analysis,
   AnalysisInput,
+  BAR_CHOICE_LABEL,
   CHOICE_LABEL,
-  Choice,
   EvidenceLevel,
+  PREDICTIONS,
+  Prediction,
   TASK_BY_ID,
   TaskId,
+  barSidesAt,
   isDontKnow,
+  isPredictTask,
   meanOf,
+  predictionLabel,
+  promptFor,
   ruleAnalyze,
   sidesAt,
   tiltAt,
@@ -130,19 +136,21 @@ async function askClaude<S extends z.ZodType>(system: string, user: string, sche
 const fmt = (x: number) => String(parseFloat(x.toFixed(2)));
 
 const ANALYZE_SYSTEM = `당신은 초등학교 5학년 수학 '평균' 수업에서 교사를 돕는 연구 보조자입니다.
-학생은 같은 자료를 '막대 그림'과 '시소 그림' 두 표상으로 보며 탐구합니다. 당신의 일은 학생 반응에서 두 표상을 연결한 증거를 찾아 교사에게 보고하는 것입니다.
-정답·오답이나 통과 여부를 정하지 않습니다. 학생에게 하는 말은 쓰지 마세요.
+학생은 같은 자료를 '막대 그림'과 '시소 그림' 두 표상으로 보며 탐구합니다. 두 그림에서 같은 자료는 같은 색·이름표로 처음부터 이어져 있습니다.
+탐구는 1) 막대 그림만 보고 가려 둔 시소 그림 예상하기, 2) 시소 그림만 보고 가려 둔 막대 그림 예상하기(다른 자료), 3) 받침점을 5에 두고 자료를 바꾸어 평평함 지키기, 4) 나만의 자료로 같은 관계 확인하기입니다.
+당신의 일은 학생 반응에서 두 표상을 연결한 증거를 찾아 교사에게 보고하는 것입니다. 정답·오답이나 통과 여부를 정하지 않습니다. 학생에게 하는 말은 쓰지 마세요.
 
 판단 항목 (각각 yes / partial / no / na 중 하나):
-- dataMatch (자료값의 대응): 막대 하나와 추 하나가 같은 자료라는 것, 즉 막대의 높이와 시소 눈금 위 추의 위치가 같은 수라는 것을 말하거나 표시했는가.
-- deviationMatch (기준값과의 차이 대응): 막대 그림에서 초록 선(기준선) 위로 넘친 부분·아래로 모자란 부분을 시소 그림에서 받침점 오른쪽·왼쪽의 거리와 대응시켰는가.
+- dataMatch (자료값의 대응): 막대의 높이와 시소 눈금 위 추의 위치가 같은 수라는 것을 학생이 글로 말했는가. 색으로 이미 이어 주므로 글에 없으면 na로 두세요.
+- deviationMatch (기준값과의 차이 대응): 막대 그림에서 초록 선(기준선) 위로 넘친 부분·초록 선까지 모자란 부분을 시소 그림에서 받침점 오른쪽·왼쪽의 거리와 대응시켰는가.
   넘친 것을 왼쪽에, 모자란 것을 오른쪽에 잇는 등 대응이 뒤집혀 있으면 yes로 보지 말고 teacherCheck를 true로 하세요.
-- usedAsEvidence (근거로 사용): 그 대응을 예상이나 설명의 근거로 썼는가 (예: 넘친 칸이 더 많으니 오른쪽이 내려갈 것이다).
-  예상이 결과와 달라도 근거를 썼다면 인정합니다. 반대로 예상이 맞아도 근거가 없으면 no입니다.
+- usedAsEvidence (근거로 사용): 그 대응을 예상이나 설명의 근거로 썼는가 (예: 넘친 칸이 더 많으니 오른쪽이 내려갈 것이다 / 시소가 오른쪽으로 기울었으니 넘친 부분이 더 많을 것이다 / 자료가 바뀌어도 넘친 칸과 모자란 칸이 같으면 시소가 평평하다).
+  예상이 결과와 달라도 근거를 썼다면 인정합니다. 반대로 예상이 맞아도 근거가 없으면 no입니다. 학생은 예상할 때마다 까닭을 꼭 씁니다.
 - 이 탐구에서 볼 수 없는 항목은 na로 두세요.
 
-evidence: 판단의 근거가 되는 학생의 말을 그대로 따옴표로 인용하고, 학생이 표시한 부분(막대·추)과 예상을 함께 적으세요.
-teacherCheck: 대응이 뒤집혀 있거나, 판단이 애매하거나, 응답 직전에 대응을 보여 주는 도움(같은 자료 강조·변환 애니메이션·칸 표시 등)을 받아 해석에 주의가 필요하면 true.
+예상이 결과와 달랐던 뒤의 글에서는, 학생이 결과를 보고 무엇을 고쳐 생각했는지(또는 처음 생각을 그대로 지켰는지)를 teacherLog에 적으세요.
+evidence: 판단의 근거가 되는 학생의 말을 그대로 따옴표로 인용하고, 예상과 결과를 함께 적으세요.
+teacherCheck: 대응이 뒤집혀 있거나, 판단이 애매하거나, 응답 직전에 대응을 보여 주는 도움(변환 애니메이션·칸 표시·양쪽 거리의 합 등)을 받아 해석에 주의가 필요하면 true.
 flags: 교사가 눈여겨볼 점을 짧은 구절로 (없으면 빈 배열).
 teacherLog: 교사용 진단 2~4문장. 학생이 응답 전에 본 도움이 있으면 '도움을 받은 뒤의 반응'임을 밝히세요.
 suggestedSupport: 다음에 줄 만한 도움 단계(1 탐색 질문, 2 살펴볼 대상 제안, 3 대응을 보여 주는 도움, 4 교사의 관계 설명)와 까닭을 한 문장으로. 필요 없으면 '추가 도움 없이 다음 탐구로'.
@@ -157,9 +165,14 @@ function buildAnalyzeInput(inp: AnalysisInput, attempt: number) {
   const atP = sidesAt(v, inp.p);
   const devMean = v.map((x) => fmt(x - mean)).join(', ');
   const devP = v.map((x) => fmt(x - inp.p)).join(', ');
-  const pickVals = (idx: number[] | undefined) => (idx ?? []).map((i) => v[i]).join(', ') || '없음';
+  const hiddenNote =
+    inp.revealed === false && isPredictTask(inp.taskId)
+      ? inp.taskId === 'predictSeesaw'
+        ? ' (학생은 막대 그림만 보고 있고, 시소 그림은 가려져 있음)'
+        : ' (학생은 시소 그림만 보고 있고, 막대 그림은 가려져 있음)'
+      : '';
   return `[탐구] ${task.label}. ${task.title}
-[첫 발문] ${inp.taskId === 'predict' && inp.round != null ? task.prompt.replace('4에', `${inp.round}에`) : task.prompt}
+[첫 발문] ${promptFor(task, inp.round ?? inp.p)}
 [교사가 보려는 것] ${task.goal} ${task.look}
 
 [응답 당시 화면]
@@ -167,10 +180,12 @@ function buildAnalyzeInput(inp: AnalysisInput, attempt: number) {
 - 평균과의 차이: ${devMean} → 평균 위 합 ${fmt(atMean.over)}, 평균 아래 합 ${fmt(atMean.under)}
 - 실제 초록색(초록 선 = 받침점) 위치: ${fmt(inp.p)} (평균이 아닐 수 있음)
 - 현재 기준과의 차이: ${devP} → 넘침(= 받침점 오른쪽 거리의 합) ${fmt(atP.over)}, 모자람(= 왼쪽 거리의 합) ${fmt(atP.under)}
-- 이때 시소: ${CHOICE_LABEL[tiltAt(v, inp.p)]}${inp.revealed === false ? ' (학생은 아직 시소를 보지 못함)' : ''}
-${inp.before ? `- 바꾸기 전 자료: ${inp.before.join(', ')}\n` : ''}${inp.prediction ? `- 학생의 예상: ${CHOICE_LABEL[inp.prediction as Choice]}\n` : ''}${
-    inp.picks ? `- 학생이 표시한 막대(자료값): ${pickVals(inp.picks.bars)} / 표시한 추(자료값): ${pickVals(inp.picks.weights)}\n` : ''
-  }${inp.match ? `- 학생이 짝지은 것: 막대 ${v[inp.match.bar]} ↔ 추 ${v[inp.match.weight]}\n` : ''}- 응답 전에 본 도움·강조: ${(inp.supportsSeen ?? []).map(supportLabel).join(', ') || '없음'}
+- 이때 시소: ${CHOICE_LABEL[tiltAt(v, inp.p)]} / 이때 막대 그림: ${BAR_CHOICE_LABEL[barSidesAt(v, inp.p)]}${hiddenNote}
+${inp.before ? `- 바꾸기 전 자료: ${inp.before.join(', ')}\n` : ''}${inp.prediction ? `- 학생의 예상: ${predictionLabel(inp.prediction)}\n` : ''}${
+    inp.history?.length
+      ? `- 세 번의 예상과 결과: ${inp.history.map((h) => `초록색 ${h.p}에서 예상 ${h.prediction ? predictionLabel(h.prediction) : '-'} → 결과 ${predictionLabel(h.actual)}`).join(' / ')}\n`
+      : ''
+  }- 응답 전에 본 도움·강조: ${(inp.supportsSeen ?? []).map(supportLabel).join(', ') || '없음'}
 
 [학생 응답 (${inp.step}, ${inp.kind === 'first' ? '처음 응답' : '수정한 응답'}, ${attempt}번째 저장)]
 <answer>
@@ -180,11 +195,8 @@ ${inp.text}
 
 const LEVELS: EvidenceLevel[] = ['yes', 'partial', 'no', 'na'];
 const asLevel = (x: string): EvidenceLevel => (LEVELS.includes(x as EvidenceLevel) ? (x as EvidenceLevel) : 'na');
-const TASK_IDS: TaskId[] = ['explore', 'match', 'predict', 'change', 'summary'];
-const CHOICES: Choice[] = ['left', 'flat', 'right', 'unsure'];
-
-const isIndexList = (xs: unknown, n: number): xs is number[] =>
-  Array.isArray(xs) && xs.length <= 20 && xs.every((i) => Number.isInteger(i) && i >= 0 && i < n);
+const TASK_IDS: TaskId[] = ['predictSeesaw', 'predictBars', 'change', 'custom'];
+const isPrediction = (x: unknown): x is Prediction => PREDICTIONS.includes(x as Prediction);
 
 // 브라우저가 보낸 값을 그대로 믿지 않고 검사한다
 function readInput(body: any): AnalysisInput | null {
@@ -193,12 +205,6 @@ function readInput(body: any): AnalysisInput | null {
   if (!Array.isArray(values) || values.length < 1 || values.length > 12 || !values.every((x: unknown) => typeof x === 'number' && Number.isFinite(x))) return null;
   const n = values.length;
   const p = typeof body.p === 'number' && Number.isFinite(body.p) ? body.p : meanOf(values);
-  const picks =
-    body.picks && isIndexList(body.picks.bars, n) && isIndexList(body.picks.weights, n) ? { bars: body.picks.bars, weights: body.picks.weights } : undefined;
-  const match =
-    body.match && Number.isInteger(body.match.bar) && Number.isInteger(body.match.weight) && body.match.bar < n && body.match.weight < n
-      ? { bar: body.match.bar, weight: body.match.weight }
-      : undefined;
   const before =
     Array.isArray(body.before) && body.before.length === n && body.before.every((x: unknown) => typeof x === 'number' && Number.isFinite(x)) ? body.before : undefined;
   return {
@@ -209,10 +215,14 @@ function readInput(body: any): AnalysisInput | null {
     values,
     p,
     round: typeof body.round === 'number' ? body.round : undefined,
-    prediction: CHOICES.includes(body.prediction) ? body.prediction : undefined,
+    prediction: isPrediction(body.prediction) ? body.prediction : undefined,
     revealed: typeof body.revealed === 'boolean' ? body.revealed : undefined,
-    picks,
-    match,
+    history: Array.isArray(body.history)
+      ? body.history
+          .slice(0, 6)
+          .filter((h: any) => h && typeof h.p === 'number' && Number.isFinite(h.p) && isPrediction(h.actual))
+          .map((h: any) => ({ p: h.p, prediction: isPrediction(h.prediction) ? h.prediction : undefined, actual: h.actual }))
+      : undefined,
     before,
     supportsSeen: Array.isArray(body.supportsSeen) ? body.supportsSeen.slice(0, 40).map((x: unknown) => String(x).slice(0, 40)) : undefined,
   };
@@ -225,14 +235,14 @@ app.post('/api/analyze', async (req, res) => {
 
   const rule = ruleAnalyze(inp);
   // 키가 없거나, 글도 표시도 없이 '모르겠어요'뿐이면 AI를 부르지 않는다
-  const nothing = (!inp.text.trim() || isDontKnow(inp.text)) && !inp.picks && !inp.match && !inp.prediction;
+  const nothing = (!inp.text.trim() || isDontKnow(inp.text)) && !inp.prediction;
   if (!claude || nothing) return res.json(rule);
 
   const AnalysisSchema = z.object({
     dataMatch: z.string().describe('yes | partial | no | na'),
     deviationMatch: z.string().describe('yes | partial | no | na'),
     usedAsEvidence: z.string().describe('yes | partial | no | na'),
-    evidence: z.string().describe('판단 근거가 되는 학생의 말(인용)과 표시'),
+    evidence: z.string().describe('판단 근거가 되는 학생의 말(인용)과 예상·결과'),
     teacherCheck: z.boolean().describe('교사 확인이 필요한지'),
     flags: z.array(z.string()).describe('교사가 눈여겨볼 점'),
     teacherLog: z.string().describe('교사용 진단 2~4문장'),

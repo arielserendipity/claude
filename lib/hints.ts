@@ -53,10 +53,9 @@ export type SupportKind =
   | 'help2'
   | 'help3'
   | 'help4'
-  | 'pairCues' // 같은 자료를 같은 색·이름표로 보여 주고 동시 강조
   | 'cells' // 칸(넘침·모자람 / 거리) 표시
   | 'morph' // 막대 그림 → 시소 그림 변환 애니메이션
-  | 'reveal' // 가려 둔 시소 공개
+  | 'reveal' // 가려 둔 그림(시소 그림 또는 막대 그림) 공개
   | `hint:${HintKey}`
   | `a1:${string}`; // 활동 1에서 본 시각 힌트
 
@@ -65,10 +64,9 @@ export const SUPPORT_KIND_LABEL: Record<string, string> = {
   help2: '도움2 대상 제안',
   help3: '도움3 대응 보여 주기',
   help4: '도움4 선생님',
-  pairCues: '같은 자료 색·이름표·동시 강조',
   cells: '칸 표시',
   morph: '변환 애니메이션',
-  reveal: '시소 공개',
+  reveal: '가려 둔 그림 공개',
 };
 
 export const supportLabel = (k: string) =>

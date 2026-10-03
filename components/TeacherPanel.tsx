@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, Copy, FileDown, KeyRound, Send, Trash2, X } from 'lucide-react';
 import { LogEntry, TeacherNote } from '../types';
-import { TASKS } from '../lib/questions';
+import { PREDICT, TASKS, isPredictTask, promptFor } from '../lib/questions';
 import { SUPPORT_LEVEL_LABEL, TEACHER_HELP_TEXT } from '../lib/hints';
 
 export const TEACHER_TITLES = {
@@ -104,7 +104,7 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
       activity: 'A2',
       action: 'SHEET_TEST',
       details: '구글 스프레드시트 연동 테스트',
-      taskId: 'explore',
+      taskId: 'predictSeesaw',
       answer: '테스트 응답',
       context: JSON.stringify({ values: [2, 3, 4, 4, 6, 7, 9], p: 5 }),
       teacherLog: '테스트용 분석',
@@ -200,14 +200,18 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
               {showRubric && (
                 <div className="px-4 pb-4 space-y-4">
                   <div className="text-xs text-slate-500">
-                    기본 자료: 2, 3, 4, 4, 6, 7, 9 (평균 5). 기준 4: 넘침 10 · 모자람 3 / 기준 5: 7 · 7 / 기준 6: 4 · 11. 초록 선(기준선)은 평균이 아닌 곳에도 놓일 수 있습니다.
+                    1·3번 자료: 2, 3, 4, 4, 6, 7, 9 (평균 5). 초록색 4: 넘침 10 · 모자람 3 / 5: 7 · 7 / 6: 4 · 11.
+                    <br />
+                    2번 자료: 3, 4, 5, 8, 10 (평균 6). 초록색 4: 넘침 11 · 모자람 1 / 6: 6 · 6 / 7: 4 · 9. 초록 선(기준선)·받침점은 평균이 아닌 곳에도 놓일 수 있습니다.
+                    <br />
+                    같은 자료는 처음부터 같은 색·이름표로 이어 보여 줍니다. 확인하기는 정오 판정 없이 가려 둔 그림을 보여 줍니다.
                   </div>
                   {TASKS.map((t) => (
                     <div key={t.id} className="space-y-1">
                       <div className="font-bold">
                         {t.label}. {t.title}
                       </div>
-                      <div className="text-slate-700">발문: {t.prompt}</div>
+                      <div className="text-slate-700">발문: {isPredictTask(t.id) ? promptFor(t, PREDICT[t.id].rounds[0]) : t.prompt}</div>
                       {t.steps.map((s) => (
                         <div key={s.id} className="text-xs text-slate-600">
                           · [{s.title}] {s.ask}
