@@ -297,14 +297,14 @@ export const BalanceBeamStage: React.FC<BalanceBeamStageProps> = ({
           style={{ transition: dragging ? 'none' : 'd 0.15s' }}
         />
         <g transform={`translate(${xp},${GROUND_Y + 28})`}>
-          <rect x={-28} y={-17} width={56} height={34} rx={17} fill={MEAN.fill} stroke={MEAN.stroke} strokeWidth={2.5} />
-          <text y={7} fontSize={19} textAnchor="middle" fill="#14532d">
+          <circle r={21} fill={MEAN.stroke} stroke="#fff" strokeWidth={3} />
+          <text y={6} fontSize={17} textAnchor="middle" fill="#fff">
             {fmt(fulcrumPosition)}
           </text>
           {canDrag && (
             <>
-              <path d="M -43 0 L -35 -7 L -35 7 Z" fill={MEAN.stroke} />
-              <path d="M 43 0 L 35 -7 L 35 7 Z" fill={MEAN.stroke} />
+              <path d="M -26 -7 L -34 0 L -26 7 Z" fill={MEAN.stroke} />
+              <path d="M 26 -7 L 34 0 L 26 7 Z" fill={MEAN.stroke} />
             </>
           )}
         </g>

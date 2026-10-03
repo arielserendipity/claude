@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, Copy, FileDown, KeyRound, Send, Trash2, X } from 'lucide-react';
 import { LogEntry, TeacherNote } from '../types';
-import { QUESTIONS, Verdict } from '../lib/questions';
+import { PART_TITLE, QUESTIONS, Verdict } from '../lib/questions';
 import { HINT_TEACHER_DESC } from '../lib/hints';
 
 export const TEACHER_TITLES = {
@@ -216,7 +216,10 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
                       <ul className="list-disc pl-5 text-xs text-slate-500">
                         {q.ideas.map((i) => (
                           <li key={i.id}>
-                            <span className="text-slate-700">꼭 쓸 것 “{i.student}”</span> — {i.teacher}
+                            <span className="text-slate-700">
+                              [{PART_TITLE[i.part]}] “{i.ask}”
+                            </span>{' '}
+                            — {i.teacher}
                             <br />
                             인정 예: {i.accept}
                             <br />
