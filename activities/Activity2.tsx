@@ -42,6 +42,7 @@ import {
   outcomeAt,
   predictionLabel,
   promptFor,
+  customMissing,
   ruleAnalyze,
   tiltAt,
 } from '../lib/questions';
@@ -54,6 +55,7 @@ import { fmt } from '../lib/geometry';
 // ---------------------------------------------------------------------------
 // 활동 2: 다른 그림 예상하기(두 방향) → 자료를 바꾸어 시험하기 → 나만의 자료로 확인하기
 // - 학생에게는 판정(별·통과)을 보여 주지 않는다. 예상 저장하기 · 확인하기 · 생각 저장하기 · 생각 수정하기 · 다음 탐구만 있다.
+// - 도움은 학생이 틀릴 때마다 한 단계씩 올라간다(예상과 결과가 다를 때, 바꾼 자료에서 시소가 기울 때, 나만의 자료에서 구할 수가 빠졌을 때).
 // - 확인하기는 정오 대신 가려 둔 그림 자체를 보여 준다(시소가 기울거나, 막대 그림이 칸과 함께 나타남).
 // - 다음 탐구는 '해야 할 일을 마쳤는지'로 열리고, AI 분석 결과와는 관계없다. 분석은 교사 기록에만 남는다.
 // - 같은 자료는 처음부터 같은 색·이름표로 잇는다. 학생은 기준과의 차이(넘침·모자람 ↔ 오른쪽·왼쪽 거리)와 그 관계를 생각한다.
@@ -157,7 +159,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   useEffect(() => saveSession(storeKey, st), [st, storeKey]);
   const patch = (fn: (s: A2State) => Partial<A2State>) => setSt((s) => ({ ...s, ...fn(s) }));
 
-  const [openId, setOpenId] = useState<TaskId>(() => TASKS.find((t) => !st.done[t.id])?.id ?? 'custom');
+  const [openId, setOpenId] = useState<TaskId>(() => (TASKS.find((t) => !st.done[t.id]) ?? TASKS[TASKS.length - 1]).id);
   const [editing, setEditing] = useState<Record<string, boolean>>({});
 
   // 예상하기: 지금 탐구의 자료·초록색 위치·라운드
@@ -408,6 +410,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setEditing((e) => ({ ...e, [key]: false }));
     const stepTitle = t.steps.find((x) => x.id === stepId)?.title ?? stepId;
     record({ task: t.id, step: stepId, stepTitle, kind, text, attempt, extra, meta });
+    // 3. 나만의 자료: 구해야 할 수가 빠졌으면 틀린 것으로 보고 도움을 한 단계 올린다
+    if (t.id === 'custom') {
+      const missing = customMissing(stepId, extra?.values ?? values, text);
+      if (missing.length) raiseHelp(`${stepTitle}: ${missing.join(', ')} 빠짐`);
+    }
   };
 
   const markDone = (id: TaskId) => {
@@ -416,12 +423,13 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     addLog('TASK_DONE', `${TASK_BY_ID[id].label}. ${TASK_BY_ID[id].title}`, { activity: 'A2', taskId: id });
   };
 
-  // ---------- 도움 ----------
-  const askHelp = () => {
+  // ---------- 도움: 틀릴 때마다 한 단계씩 (교사 미리보기에서는 단추로도 올려 볼 수 있음) ----------
+  const raiseHelp = (cause: string) => {
     const level = Math.min(MAX_SUPPORT_LEVEL, helpLevel + 1) as SupportLevel;
     if (level === helpLevel) return;
     patch((s) => ({ help: { ...s.help, [openId]: level } }));
     noteSupport(`help${level}`);
+    addLog('HELP_UP', `${task.label}. 도움 ${level} · ${SUPPORT_LEVEL_LABEL[level]} (${cause})`, { activity: 'A2', taskId: openId, hint: `help${level}` });
     if (level === 3) {
       setShowCells(true);
       noteSupport('cells', openId, true);
@@ -431,8 +439,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (level === 4) {
       onTeacherNote({
         activity: 'A2',
-        title: `활동 2 · ${task.label}. ${task.title} · 도움 4단계 요청`,
-        body: '학생이 도움 1~3단계를 받은 뒤 선생님의 도움(관계 설명)을 요청했습니다. 학생의 사례로 대응 관계를 함께 정리해 주세요.',
+        title: `활동 2 · ${task.label}. ${task.title} · 도움 4단계(선생님)`,
+        body: `도움 1~3단계를 받은 뒤에도 다시 틀려 선생님의 도움(관계 설명)이 필요합니다. 마지막 계기: ${cause}. 학생의 사례로 대응 관계를 함께 정리해 주세요.`,
         check: true,
       });
     }
@@ -497,6 +505,10 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       activity: 'A2',
       taskId: openId,
     });
+    // 예상이 결과와 다르면('아직 모르겠어요' 포함) 도움을 한 단계 올린다
+    if (rs.prediction !== actual) {
+      raiseHelp(`초록색 ${round}: 예상 ${rs.prediction ? predictionLabel(rs.prediction) : '-'}, 결과 ${predictionLabel(actual)}`);
+    }
   };
   const historyOf = (id: PredictTaskId) =>
     PREDICT[id].rounds.map((r) => {
@@ -505,7 +517,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     });
   const allRevealed = (id: PredictTaskId) => PREDICT[id].rounds.every((r) => st.rounds[roundKey(id, r)]?.revealed);
 
-  // ---------- 3. 자료 바꾸기 ----------
+  // ---------- 4. 자료 바꾸기 ----------
   const methodSaved = !!st.saved['change.method'];
   const changes = DEFAULT_VALUES.map((v, i) => ({ i, from: v, to: st.work[i] })).filter((c) => c.from !== c.to);
   const checkChange = () => {
@@ -523,9 +535,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         supportsBefore: supportsRef.current.filter((e) => e.task === 'change'),
       }),
     });
+    // 바꾼 자료에서 시소가 기울면 도움을 한 단계 올린다
+    if (tilt !== 'flat') raiseHelp(`[${st.work.join(', ')}]에서 시소 ${CHOICE_LABEL[tilt]}`);
   };
 
-  // ---------- 4. 나만의 자료: 처음 자료 / 새로운 자료 ----------
+  // ---------- 3. 나만의 자료: 처음 자료 / 새로운 자료 ----------
   const customMode = openId === 'custom' && st.dataMode === 'custom';
   const chooseData = (mode: DataMode) => {
     if (mode === st.dataMode) return;
@@ -552,7 +566,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const importable = solvedProblems.filter((s) => s.values.length >= 2 && s.values.length <= MAX_ITEMS);
   const customReady = st.custom.length >= 2;
 
-  // 막대 끝이나 추를 끌어 자료값 바꾸기 (3번: 복사본, 4번: 나만의 자료)
+  // 막대 끝이나 추를 끌어 자료값 바꾸기 (3번: 나만의 자료, 4번: 복사본)
   const editValue = (i: number, v: number) => {
     if (openId === 'change') patch((s) => ({ work: s.work.map((x, k) => (k === i ? v : x)) }));
     else if (customMode) patch((s) => ({ custom: s.custom.map((x, k) => (k === i ? v : x)) }));
@@ -911,7 +925,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                   {/* 1·2. 다른 그림 예상하기 */}
                   {isPredictTask(t.id) && predictPanel(t, t.id)}
 
-                  {/* 3. 자료를 바꾸어 시험하기 */}
+                  {/* 4. 자료를 바꾸어 시험하기 */}
                   {t.id === 'change' && (
                     <>
                       {box(t, 'method', 'change.method')}
@@ -956,7 +970,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                     </>
                   )}
 
-                  {/* 4. 나만의 자료로 확인하기 */}
+                  {/* 3. 나만의 자료로 확인하기 */}
                   {t.id === 'custom' && (
                     <>
                       <span className="self-end flex items-center gap-1 text-xs text-slate-400 font-mono">
@@ -974,35 +988,47 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                     </>
                   )}
 
-                  {/* 도움 · 다음 탐구 */}
-                  <div className="flex items-center gap-2 flex-wrap pt-1">
-                    <button
-                      onClick={askHelp}
-                      disabled={helpLevel >= MAX_SUPPORT_LEVEL}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-full border-2 border-amber-300 bg-amber-50 text-amber-800 font-korean hover:bg-amber-100 disabled:opacity-40"
-                    >
-                      <HandHelping size={18} /> 도움
-                      <span className="flex gap-0.5 ml-1">
-                        {[1, 2, 3, 4].map((k) => (
-                          <span key={k} className={`w-1.5 h-1.5 rounded-full ${k <= helpLevel ? 'bg-amber-500' : 'bg-amber-200'}`} />
-                        ))}
-                      </span>
-                    </button>
-                    {st.done[t.id] && idx < TASKS.length - 1 && (
-                      <button
-                        onClick={() => openTask(TASKS[idx + 1].id)}
-                        className="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 text-white font-korean hover:bg-indigo-700 active:scale-95"
-                      >
-                        다음 탐구 <ArrowRight size={18} />
-                      </button>
-                    )}
-                  </div>
+                  {/* 도움: 틀릴 때마다 한 단계씩 나타남 */}
                   {helpLevel > 0 && (
-                    <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 font-korean text-[15px] text-amber-900">
-                      <div className="text-xs text-amber-600 mb-0.5">
-                        도움 {helpLevel} · {SUPPORT_LEVEL_LABEL[helpLevel as SupportLevel]}
+                    <div
+                      key={`help-${helpLevel}`}
+                      className="help-in rounded-xl bg-amber-50 border-2 border-amber-200 px-3 py-2 font-korean text-[15px] text-amber-900 flex gap-2"
+                    >
+                      <HandHelping size={20} className="shrink-0 mt-0.5 text-amber-600" />
+                      <div className="flex-1">
+                        <div className="text-xs text-amber-600 mb-0.5 flex items-center gap-1.5">
+                          도움 {helpLevel} · {SUPPORT_LEVEL_LABEL[helpLevel as SupportLevel]}
+                          <span className="flex gap-0.5">
+                            {[1, 2, 3, 4].map((k) => (
+                              <span key={k} className={`w-1.5 h-1.5 rounded-full ${k <= helpLevel ? 'bg-amber-500' : 'bg-amber-200'}`} />
+                            ))}
+                          </span>
+                        </div>
+                        {helpLevel >= 4 ? TEACHER_HELP_TEXT : t.help[helpLevel - 1]}
                       </div>
-                      {helpLevel >= 4 ? TEACHER_HELP_TEXT : t.help[helpLevel - 1]}
+                    </div>
+                  )}
+
+                  {/* 다음 탐구 (교사 미리보기에서는 도움 단계를 직접 올려 볼 수 있음) */}
+                  {(teacherMode || (st.done[t.id] && idx < TASKS.length - 1)) && (
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {teacherMode && (
+                        <button
+                          onClick={() => raiseHelp('교사 미리보기')}
+                          disabled={helpLevel >= MAX_SUPPORT_LEVEL}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-full border-2 border-dashed border-amber-300 bg-white text-amber-800 font-korean text-sm hover:bg-amber-50 disabled:opacity-40"
+                        >
+                          <HandHelping size={16} /> 도움 단계 올려 보기 (교사)
+                        </button>
+                      )}
+                      {st.done[t.id] && idx < TASKS.length - 1 && (
+                        <button
+                          onClick={() => openTask(TASKS[idx + 1].id)}
+                          className="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 text-white font-korean hover:bg-indigo-700 active:scale-95"
+                        >
+                          다음 탐구 <ArrowRight size={18} />
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
