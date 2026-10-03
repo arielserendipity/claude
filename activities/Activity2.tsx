@@ -6,6 +6,7 @@ import {
   Circle,
   CircleCheck,
   Lightbulb,
+  Link2,
   Lock,
   Play,
   Repeat,
@@ -23,11 +24,15 @@ import { ActiveHint, MAX_ITEMS, ModelStage, ViewMode } from '../components/Model
 import {
   DEFAULT_VALUES,
   EvalResult,
+  PART_TITLE,
+  PartAnswers,
+  PartModel,
   QUESTIONS,
   Question,
   QuestionId,
   Verdict,
   hintsForMissing,
+  joinAnswer,
   ruleEvaluate,
 } from '../lib/questions';
 import type { HintRef } from '../lib/hints';
@@ -39,13 +44,13 @@ import { fmt } from '../lib/geometry';
 type AnswerStatus = 'idle' | 'loading' | Verdict;
 
 interface AnswerState {
-  text: string;
+  parts: PartAnswers; // 칸별 답 (막대 그림에서 / 균형점 그림에서 / 두 그림을 이어 보면)
   status: AnswerStatus;
   hints: HintRef[];
   attempts: number;
   retries: number; // 🔍(핵심 내용이 하나도 없는 답) 받은 횟수 — 2회부터 시각 힌트
   cleared: boolean; // 반쪽 별 이상을 한 번이라도 받음 → 다음 문항이 열림
-  found: string[]; // 마지막 답에서 확인된 '꼭 쓸 것' (체크 표시)
+  found: string[]; // 마지막 답에서 확인된 칸 (✓ 표시)
 }
 
 type Answers = Record<QuestionId, AnswerState>;
@@ -55,7 +60,7 @@ const HINT_STEP_MS = 7000;
 const HINT_AFTER_RETRIES = 2;
 
 const emptyAnswer = (): AnswerState => ({
-  text: '',
+  parts: {},
   status: 'idle',
   hints: [],
   attempts: 0,
@@ -68,7 +73,8 @@ function loadAnswers(key: string): Answers {
   const stored = loadStored<Partial<Record<QuestionId, Partial<AnswerState>>>>(key, {});
   return Object.fromEntries(
     QUESTIONS.map((q) => {
-      const a = { ...emptyAnswer(), ...(stored[q.id] ?? {}) };
+      const { text: _oldText, ...saved } = (stored[q.id] ?? {}) as Partial<AnswerState> & { text?: string };
+      const a = { ...emptyAnswer(), ...saved, parts: { ...(saved.parts ?? {}) } };
       // 예전 저장본에는 cleared가 없으므로 판정으로 채운다
       if (stored[q.id]?.cleared == null) a.cleared = a.status === 'PASS' || a.status === 'PARTIAL';
       if (a.status === 'loading') a.status = 'idle';
@@ -258,10 +264,14 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   // ---------- 서술형 제출 ----------
   const setAnswer = (id: QuestionId, patch: Partial<AnswerState>) =>
     setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const setPart = (id: QuestionId, ideaId: string, text: string) =>
+    setAnswers((prev) => ({ ...prev, [id]: { ...prev[id], parts: { ...prev[id].parts, [ideaId]: text } } }));
+  const hasAnyText = (q: Question, a: AnswerState) => q.ideas.some((i) => (a.parts[i.id] ?? '').trim());
 
   const submit = async (q: Question) => {
     const prev = answers[q.id];
-    const text = prev.text.trim();
+    const parts: PartAnswers = Object.fromEntries(q.ideas.map((i) => [i.id, (prev.parts[i.id] ?? '').trim()]));
+    const text = joinAnswer(q, parts);
     if (!text || prev.status === 'loading') return;
     const attempt = prev.attempts + 1;
     setAnswer(q.id, { status: 'loading' });
@@ -273,13 +283,13 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
       const res = await fetch('/api/evaluate-answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerName, questionId: q.id, answer: text, values: ctxValues, p: ctxP, attempt }),
+        body: JSON.stringify({ playerName, questionId: q.id, answers: parts, values: ctxValues, p: ctxP, attempt }),
       });
       if (!res.ok) throw new Error(`status ${res.status}`);
       result = (await res.json()) as EvalResult;
     } catch (err) {
       console.warn('evaluate-answer failed, using local rubric:', err);
-      result = ruleEvaluate(q, text);
+      result = ruleEvaluate(q, parts);
       result.teacherLog = `[서버 연결 실패 → 기기 내 규칙 채점] ${result.teacherLog}`;
     }
 
@@ -346,11 +356,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
               addLog('TOGGLE_CELLS', String(!showCells), { activity: 'A2' });
             }}
             aria-label="칸"
-            className={`w-11 h-11 rounded-xl border-2 flex items-center justify-center transition-all ${
-              showCells ? 'bg-orange-50 border-orange-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+            className={`h-11 pl-2 pr-3 rounded-xl border-2 flex items-center gap-1 font-korean transition-all ${
+              showCells ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
             }`}
           >
-            <CellsIcon active={showCells} />
+            <CellsIcon active={showCells} /> 칸
           </button>
 
           <button
@@ -520,43 +530,49 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
               </button>
               {open && (
                 <div className="px-4 pb-4 flex flex-col gap-2">
-                  {/* 꼭 쓸 것: 제출하면 쓴 항목에 ✓ */}
-                  <div className="rounded-xl bg-indigo-50/70 border border-indigo-100 px-3 py-2">
-                    <div className="text-xs font-korean text-indigo-500 mb-1">꼭 쓸 것</div>
-                    <ul className="flex flex-col gap-1">
-                      {q.ideas.map((idea) => {
-                        const done = a.found.includes(idea.id);
-                        return (
-                          <li key={idea.id} className={`flex items-start gap-2 font-korean text-[15px] ${done ? 'text-emerald-700' : 'text-slate-700'}`}>
-                            {done ? (
-                              <CircleCheck size={18} className="shrink-0 mt-0.5 text-emerald-500" />
-                            ) : (
-                              <Circle size={18} className="shrink-0 mt-0.5 text-indigo-300" />
-                            )}
-                            {idea.student}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
                   {q.usesCustomData && (
                     <span className="self-end flex items-center gap-1 text-xs text-slate-400 font-mono">
                       [{values.join(', ')}]
                       <span style={{ color: MEAN.stroke }}>▲{fmt(p)}</span>
                     </span>
                   )}
-                  <textarea
-                    value={a.text}
-                    onChange={(e) => setAnswer(q.id, { text: e.target.value })}
-                    rows={4}
-                    maxLength={1000}
-                    placeholder="✏️"
-                    className="w-full rounded-xl border-2 border-slate-200 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none p-3 text-[16px] leading-relaxed resize-y"
-                  />
+                  {/* 그림별 답 칸: 발문을 읽고 그 그림에서 무엇을 뜻하는지 쓴다. 제출하면 채운 칸에 ✓ */}
+                  {q.ideas.map((idea) => {
+                    const done = a.found.includes(idea.id);
+                    const PartIcon = PART_ICON[idea.part];
+                    return (
+                      <div
+                        key={idea.id}
+                        className={`rounded-xl border-2 px-3 pt-2 pb-2.5 flex flex-col gap-1.5 transition-colors ${
+                          done ? 'border-emerald-200 bg-emerald-50/50' : PART_STYLE[idea.part]
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 font-korean text-sm text-slate-500">
+                          <PartIcon size={17} className="shrink-0" />
+                          <span className="flex-1">{PART_TITLE[idea.part]}</span>
+                          {done ? (
+                            <CircleCheck size={20} className="shrink-0 text-emerald-500" />
+                          ) : (
+                            <Circle size={20} className="shrink-0 text-slate-300" />
+                          )}
+                        </div>
+                        <p className="font-korean text-[15px] leading-snug text-slate-800">{idea.ask}</p>
+                        <textarea
+                          value={a.parts[idea.id] ?? ''}
+                          onChange={(e) => setPart(q.id, idea.id, e.target.value)}
+                          rows={2}
+                          maxLength={600}
+                          placeholder="✏️"
+                          aria-label={`${PART_TITLE[idea.part]}: ${idea.ask}`}
+                          className="w-full rounded-lg border-2 border-slate-200 bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none px-3 py-2 text-[16px] leading-relaxed resize-y"
+                        />
+                      </div>
+                    );
+                  })}
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => submit(q)}
-                      disabled={!a.text.trim() || a.status === 'loading'}
+                      disabled={!hasAnyText(q, a) || a.status === 'loading'}
                       className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 text-white font-korean whitespace-nowrap hover:bg-indigo-700 disabled:opacity-40 active:scale-95 transition"
                     >
                       {a.status === 'loading' ? <RotateCcw size={18} className="animate-spin" /> : <Send size={18} />}
@@ -590,6 +606,13 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
     </div>
   );
 }
+
+const PART_ICON: Record<PartModel, typeof ChartColumn> = { bar: ChartColumn, beam: Scale, link: Link2 };
+const PART_STYLE: Record<PartModel, string> = {
+  bar: 'border-slate-200 bg-slate-50/60',
+  beam: 'border-amber-100 bg-amber-50/40',
+  link: 'border-indigo-100 bg-indigo-50/50',
+};
 
 function QNum({ label, muted, extra }: { label: string; muted?: boolean; extra?: boolean }) {
   return (
