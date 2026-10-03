@@ -98,7 +98,6 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   useEffect(() => saveStored(customKey, customValues), [customValues, customKey]);
   const values = dataMode === 'custom' ? customValues : DEFAULT_VALUES;
 
-  const [p, setP] = useState(5);
   const [view, setView] = useState<ViewMode>('side');
   const [morphT, setMorphT] = useState(0);
   const [showCells, setShowCells] = useState(false);
@@ -109,6 +108,9 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
     const firstOpen = QUESTIONS.find((q) => !answers[q.id].cleared);
     return firstOpen?.id ?? 'q1';
   });
+  // 평균선·받침점 위치. 문항마다 처음 위치가 다를 수 있다 (1번은 직접 수평을 찾도록 3에서 시작)
+  const startOf = (id: QuestionId) => QUESTIONS.find((q) => q.id === id)?.startP ?? 5;
+  const [p, setP] = useState(() => startOf(openId));
 
   const mean = useMemo(() => meanOf(values), [values]);
   const activeHint = hintQueue[0] ?? null;
@@ -200,12 +202,12 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
     addLog('MORPH_PLAY', to === 1 ? '막대 그림 → 균형점 그림' : '균형점 그림 → 막대 그림', { activity: 'A2' });
   };
 
-  // 그림을 깨끗한 처음 상태로 (힌트·칸 보기 끄기, 함께 보기, 평균선 5)
-  const cleanStage = () => {
+  // 그림을 깨끗한 처음 상태로 (힌트·칸 보기 끄기, 함께 보기, 평균선은 문항의 처음 위치)
+  const cleanStage = (id: QuestionId = openId) => {
     stopMorph();
     setView('side');
     setMorphT(0);
-    setP(5);
+    setP(startOf(id));
     setSelected(null);
     setShowCells(false);
     clearHints();
@@ -220,7 +222,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   const openQuestion = (id: QuestionId) => {
     if (id === openId) return;
     setOpenId(id);
-    cleanStage();
+    cleanStage(id);
     if (!QUESTIONS.find((q) => q.id === id)?.usesCustomData) setDataMode('default');
   };
 
