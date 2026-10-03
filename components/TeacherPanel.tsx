@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, Copy, FileDown, KeyRound, Send, Trash2, X } from 'lucide-react';
 import { LogEntry, TeacherNote } from '../types';
-import { PREDICT, TASKS, isPredictTask, promptFor } from '../lib/questions';
+import { Basis, COMMON_BASIS, PREDICT, TASKS, isPredictTask, promptFor } from '../lib/questions';
 import { SUPPORT_LEVEL_LABEL, TEACHER_HELP_TEXT } from '../lib/hints';
 
 export const TEACHER_TITLES = {
@@ -195,7 +195,7 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
             <section className="rounded-2xl border border-slate-200">
               <button onClick={() => setShowRubric((v) => !v)} className="w-full flex items-center gap-2 p-4 font-bold text-slate-800">
                 {showRubric ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                활동 2 탐구 구성 · 살펴볼 것 · 도움 단계
+                활동 2 탐구 구성 · 살펴볼 것 · 도움 단계 · 근거 연구
               </button>
               {showRubric && (
                 <div className="px-4 pb-4 space-y-4">
@@ -229,8 +229,10 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
                           {SUPPORT_LEVEL_LABEL[4]}: {TEACHER_HELP_TEXT}
                         </li>
                       </ol>
+                      <BasisList title="근거 연구" items={t.basis} />
                     </div>
                   ))}
+                  <BasisList title="모든 탐구에 공통으로 적용한 근거" items={COMMON_BASIS} />
                 </div>
               )}
             </section>
@@ -296,6 +298,22 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// 탐구를 만든 근거가 된 선행연구: 문헌 · 연구가 말하는 것 · 이 탐구에 반영한 것
+function BasisList({ title, items }: { title: string; items: Basis[] }) {
+  return (
+    <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 px-3 py-2 space-y-1.5">
+      <div className="text-xs font-bold text-indigo-700">{title}</div>
+      {items.map((b) => (
+        <div key={b.ref} className="text-xs text-slate-600">
+          <div className="font-bold text-slate-700">{b.ref}</div>
+          <div>· 연구: {b.idea}</div>
+          <div>· 반영: {b.use}</div>
+        </div>
+      ))}
     </div>
   );
 }
