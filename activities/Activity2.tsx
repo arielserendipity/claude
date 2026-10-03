@@ -114,7 +114,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
     const firstOpen = QUESTIONS.find((q) => !answers[q.id].cleared);
     return firstOpen?.id ?? 'q1';
   });
-  // 평균선·받침점 위치. 문항마다 처음 위치가 다를 수 있다 (1번은 직접 수평을 찾도록 3에서 시작)
+  // 초록색(평균선·받침점) 위치. 문항마다 처음 위치가 다를 수 있다 (1번은 학생이 직접 평균에 옮기도록 3에서 시작)
   const startOf = (id: QuestionId) => QUESTIONS.find((q) => q.id === id)?.startP ?? 5;
   const [p, setP] = useState(() => startOf(openId));
 

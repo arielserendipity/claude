@@ -624,14 +624,15 @@ function ModelView({
             onPointerDown={atBalance ? (e) => startDrag(e, 'fulcrum', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
-            <rect x={-24} y={-15} width={48} height={30} rx={15} fill={MEAN.fill} stroke={MEAN.stroke} strokeWidth={2} />
-            <text y={6} textAnchor="middle" fontSize={16} fill="#14532d">
+            {/* 평균선 손잡이와 같은 초록 동그라미: 두 그림의 '초록색'이 같은 것임을 보여 준다 */}
+            <circle r={18} fill={MEAN.stroke} stroke="#fff" strokeWidth={3} />
+            <text y={6} textAnchor="middle" fontSize={16} fill="#fff">
               {fmt(p)}
             </text>
             {atBalance && (
               <>
-                <path d="M -38 0 L -30 -6 L -30 6 Z" fill={MEAN.stroke} />
-                <path d="M 38 0 L 30 -6 L 30 6 Z" fill={MEAN.stroke} />
+                <path d="M -23 -6 L -30 0 L -23 6 Z" fill={MEAN.stroke} />
+                <path d="M 23 -6 L 30 0 L 23 6 Z" fill={MEAN.stroke} />
               </>
             )}
           </g>
