@@ -183,7 +183,7 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onGoAc
       <div className="flex-1 min-h-0 bg-white rounded-[2rem] shadow-xl border border-slate-200 overflow-hidden flex flex-col">
         {/* 진행 상황 */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2 gap-3 flex-wrap">
-          <p className="font-korean text-lg md:text-xl text-slate-700">받침점을 옮겨서 저울이 수평이 되는 곳을 찾아보세요.</p>
+          <p className="font-korean text-lg md:text-xl text-slate-700">받침점을 옮겨서 시소가 평평해지는 곳을 찾아보세요.</p>
           {appState !== 'LOBBY' && (
             <div className="flex items-center gap-2 font-korean">
               <span className="flex items-center gap-1.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full px-3 py-1">

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Star, StarHalf, UserRound } from 'lucide-react';
 import { QUESTIONS, QuestionId } from '../lib/questions';
-import { loadStored } from '../lib/storage';
+import { loadSession } from '../lib/storage';
 import { BEAM, MEAN, itemColor, itemStroke } from '../lib/palette';
 import { SolvedProblem } from '../types';
 
@@ -14,7 +14,7 @@ interface HomeProps {
 
 export function Home({ playerName, setPlayerName, solvedProblems, onOpen }: HomeProps) {
   const ready = playerName.trim().length > 0;
-  const a2 = ready ? loadStored<Partial<Record<QuestionId, { status: string }>>>(`avg_a2_${playerName}`, {}) : {};
+  const a2 = ready ? loadSession<Partial<Record<QuestionId, { status: string }>>>(`avg_a2_${playerName.trim()}`, {}) : {};
   const bestLevel = solvedProblems.reduce((m, s) => Math.max(m, s.level), 0);
 
   return (

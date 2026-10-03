@@ -5,21 +5,24 @@ import { Activity2 } from './activities/Activity2';
 import { Home } from './components/Home';
 import { TeacherPanel } from './components/TeacherPanel';
 import { AddLog, LogEntry, Screen, SolvedProblem, TeacherNote } from './types';
-import { removeStoredByPrefix, useStoredState } from './lib/storage';
+import { clearOldProgress, clearSession, removeStoredByPrefix, useSessionState, useStoredState } from './lib/storage';
 import { isTeacherName } from './lib/teacher';
 
 const MAX_LOGS = 3000;
 const MAX_NOTES = 300;
 
+// 새로고침하면 학생 진행은 처음부터. 예전 버전이 기기에 남긴 진행도 지운다 (기기 기록은 그대로).
+clearOldProgress();
+
 function App() {
   const [screen, setScreen] = useState<Screen>('HOME');
   const [visited, setVisited] = useState<{ A1: boolean; A2: boolean }>({ A1: false, A2: false });
-  const [playerName, setPlayerName] = useStoredState<string>('avg_player_name', '');
+  const [playerName, setPlayerName] = useSessionState<string>('avg_player_name', '');
   const [sheetUrl, setSheetUrl] = useStoredState<string>(
     'equilibrium_sheet_url',
     ((import.meta as any).env?.VITE_GOOGLE_SHEETS_URL as string) || ''
   );
-  const [solved, setSolved] = useStoredState<SolvedProblem[]>(`avg_solved_${playerName.trim()}`, []);
+  const [solved, setSolved] = useSessionState<SolvedProblem[]>(`avg_solved_${playerName.trim()}`, []);
   const [notes, setNotes] = useStoredState<TeacherNote[]>('avg_teacher_notes', []);
   const [logs, setLogs] = useStoredState<LogEntry[]>('avg_activity_logs', []);
   const [showTeacherPanel, setShowTeacherPanel] = useState(false);
@@ -89,6 +92,7 @@ function App() {
 
   const clearDeviceData = () => {
     removeStoredByPrefix('avg_');
+    clearSession();
     setPlayerName('');
     setNotes([]);
     setLogs([]);

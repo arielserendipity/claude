@@ -11,7 +11,6 @@ import {
   Play,
   Repeat,
   RotateCcw,
-  Scale,
   Search,
   Send,
   Sparkles,
@@ -21,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { ActiveHint, MAX_ITEMS, ModelStage, ViewMode } from '../components/ModelStage';
+import { SeesawIcon } from '../components/SeesawIcon';
 import {
   DEFAULT_VALUES,
   EvalResult,
@@ -37,14 +37,14 @@ import {
 } from '../lib/questions';
 import type { HintRef } from '../lib/hints';
 import { AddLog, SolvedProblem, TeacherNote } from '../types';
-import { loadStored, saveStored } from '../lib/storage';
+import { loadSession, saveSession } from '../lib/storage';
 import { DEFICIT, EXCESS, MEAN } from '../lib/palette';
 import { fmt } from '../lib/geometry';
 
 type AnswerStatus = 'idle' | 'loading' | Verdict;
 
 interface AnswerState {
-  parts: PartAnswers; // 칸별 답 (막대 그림에서 / 균형점 그림에서 / 두 그림을 이어 보면)
+  parts: PartAnswers; // 칸별 답 (막대 그림에서 / 시소 그림에서 / 두 그림을 이어 보면)
   status: AnswerStatus;
   hints: HintRef[];
   attempts: number;
@@ -70,7 +70,7 @@ const emptyAnswer = (): AnswerState => ({
 });
 
 function loadAnswers(key: string): Answers {
-  const stored = loadStored<Partial<Record<QuestionId, Partial<AnswerState>>>>(key, {});
+  const stored = loadSession<Partial<Record<QuestionId, Partial<AnswerState>>>>(key, {});
   return Object.fromEntries(
     QUESTIONS.map((q) => {
       const { text: _oldText, ...saved } = (stored[q.id] ?? {}) as Partial<AnswerState> & { text?: string };
@@ -97,11 +97,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   const storeKey = `avg_a2_${playerName}`;
   const customKey = `avg_a2_custom_${playerName}`;
   const [answers, setAnswers] = useState<Answers>(() => loadAnswers(storeKey));
-  useEffect(() => saveStored(storeKey, answers), [answers, storeKey]);
+  useEffect(() => saveSession(storeKey, answers), [answers, storeKey]);
 
   const [dataMode, setDataMode] = useState<DataMode>('default');
-  const [customValues, setCustomValues] = useState<number[]>(() => loadStored<number[]>(customKey, []));
-  useEffect(() => saveStored(customKey, customValues), [customValues, customKey]);
+  const [customValues, setCustomValues] = useState<number[]>(() => loadSession<number[]>(customKey, []));
+  useEffect(() => saveSession(customKey, customValues), [customValues, customKey]);
   const values = dataMode === 'custom' ? customValues : DEFAULT_VALUES;
 
   const [view, setView] = useState<ViewMode>('side');
@@ -119,6 +119,9 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   const [p, setP] = useState(() => startOf(openId));
 
   const mean = useMemo(() => meanOf(values), [values]);
+  // 2-1은 9, 2-2는 2: 문항을 여는 동안 그 자료의 막대와 추가 두 그림에서 함께 빛난다
+  const openQ = QUESTIONS.find((q) => q.id === openId);
+  const spotlight = openQ?.focusValue != null && dataMode === 'default' ? openQ.focusValue : null;
   const activeHint = hintQueue[0] ?? null;
 
   // 반쪽 별 이상을 받아야 다음 문항이 열린다 (교사 코드로 들어오면 모두 열림)
@@ -205,7 +208,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   const playMorph = () => {
     const to = morphT < 0.5 ? 1 : 0;
     animateMorph(to, 3200);
-    addLog('MORPH_PLAY', to === 1 ? '막대 그림 → 균형점 그림' : '균형점 그림 → 막대 그림', { activity: 'A2' });
+    addLog('MORPH_PLAY', to === 1 ? '막대 그림 → 시소 그림' : '시소 그림 → 막대 그림', { activity: 'A2' });
   };
 
   // 그림을 깨끗한 처음 상태로 (힌트·칸 보기 끄기, 함께 보기, 평균선은 문항의 처음 위치)
@@ -396,7 +399,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
                 onClick={() => changeCustom(s.values, `활동 1 · ${s.level}단계 불러오기`)}
                 className="px-3 py-1.5 rounded-full text-sm font-korean border bg-white border-sky-200 text-sky-800 hover:bg-sky-50 flex items-center gap-1"
               >
-                <Scale size={14} /> 활동 1 · {s.level}
+                <SeesawIcon size={14} /> 활동 1 · {s.level}
               </button>
             ))}
             <button
@@ -418,7 +421,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
                 <ChartColumn size={18} /> 막대 그림
               </span>
               <span className="absolute left-[75%] -translate-x-1/2 flex items-center gap-1.5">
-                <Scale size={18} /> 균형점 그림
+                <SeesawIcon size={18} /> 시소 그림
               </span>
             </>
           ) : (
@@ -427,7 +430,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
                 <ChartColumn size={18} /> 막대 그림
               </span>
               <span className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 transition-opacity" style={{ opacity: Math.max(0, (morphT - 0.6) * 2.5) }}>
-                <Scale size={18} /> 균형점 그림
+                <SeesawIcon size={18} /> 시소 그림
               </span>
             </>
           )}
@@ -456,6 +459,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
             onAddValue={addValue}
             onRemoveValue={removeValue}
             hint={activeHint}
+            spotlight={spotlight}
           />
 
           {activeHint && (
@@ -494,7 +498,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
               onPointerUp={() => addLog('MORPH_SLIDE', `t=${morphT.toFixed(2)}`, { activity: 'A2' })}
               className="flex-1 accent-indigo-600 h-3"
             />
-            <Scale size={26} className="text-slate-500 shrink-0" />
+            <SeesawIcon size={26} className="text-slate-500 shrink-0" />
           </div>
         )}
         {view === 'side' && <div className="h-3" />}
@@ -607,7 +611,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, solv
   );
 }
 
-const PART_ICON: Record<PartModel, typeof ChartColumn> = { bar: ChartColumn, beam: Scale, link: Link2 };
+const PART_ICON: Record<PartModel, React.ComponentType<{ size?: number; className?: string }>> = {
+  bar: ChartColumn,
+  beam: SeesawIcon,
+  link: Link2,
+};
 const PART_STYLE: Record<PartModel, string> = {
   bar: 'border-slate-200 bg-slate-50/60',
   beam: 'border-amber-100 bg-amber-50/40',

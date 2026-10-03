@@ -63,9 +63,11 @@ interface ModelStageProps {
   onAddValue?: (v: number) => void;
   onRemoveValue?: (i: number) => void;
   hint: ActiveHint | null;
+  spotlight?: number | null; // 빛나게 할 자료값 (그 막대와 추)
 }
 
 export const MAX_ITEMS = 10;
+const SPOTLIGHT = '#facc15';
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
@@ -85,6 +87,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   onAddValue,
   onRemoveValue,
   hint,
+  spotlight = null,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -191,6 +194,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     showCells,
     selected,
     hint,
+    spotlight,
     editable,
     canAdd,
     select,
@@ -266,6 +270,7 @@ interface ModelViewProps {
   showCells: boolean;
   selected: number | null;
   hint: ActiveHint | null;
+  spotlight: number | null;
   editable: boolean;
   canAdd: boolean;
   select: (i: number) => void;
@@ -284,6 +289,7 @@ function ModelView({
   showCells,
   selected,
   hint,
+  spotlight,
   editable,
   canAdd,
   select,
@@ -390,6 +396,12 @@ function ModelView({
           const labelI = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 24 }, { x: -20, y: 5 });
           return (
             <g key={`bar-${i}`} opacity={op(i)}>
+              {spotlight === v && lateR < 1 && (
+                // 애니메이션이 opacity를 덮어쓰므로, 막대가 추로 바뀌며 사라지는 정도는 바깥 g가 맡는다
+                <g opacity={1 - lateR} pointerEvents="none">
+                  <polygon points={polyPoints(pts)} fill="none" stroke={SPOTLIGHT} strokeWidth={12} strokeLinejoin="round" className="soft-pulse" />
+                </g>
+              )}
               <polygon
                 points={polyPoints(pts)}
                 fill={itemColor(i)}
@@ -460,6 +472,9 @@ function ModelView({
                   select(i);
                 }}
               >
+                {spotlight === v && (
+                  <path d={d} fill="none" stroke={SPOTLIGHT} strokeWidth={11} strokeLinejoin="round" className="soft-pulse" pointerEvents="none" />
+                )}
                 <circle cx={cx} cy={wr.y0 - 2} r={4.5} fill="none" stroke={itemStroke(i)} strokeWidth={2.5} />
                 <path d={d} fill={itemColor(i)} stroke={itemStroke(i)} strokeWidth={selected === i ? 3.5 : 1.5} strokeLinejoin="round" />
                 <text x={cx} y={wr.y0 + h / 2 + 5} fontSize={Math.min(14, h * 0.62)} textAnchor="middle" fill="#1e293b" pointerEvents="none">
@@ -604,7 +619,7 @@ function ModelView({
         </g>
       )}
 
-      {/* 받침점 (균형점 그림) */}
+      {/* 받침점 (시소 그림) */}
       {r2 > 0 && (
         <g opacity={r2}>
           <line x1={L.region.x + 14} x2={L.region.x + L.region.w - 14} y1={baseY} y2={baseY} stroke="#cbd5e1" strokeWidth={3} strokeLinecap="round" pointerEvents="none" />
@@ -688,7 +703,7 @@ function LevelingOverlay({ L, values, p, nonce }: { L: Layout; values: number[];
   );
 }
 
-// 왼쪽 거리들(파랑)과 오른쪽 거리들(주황)을 각각 한 줄로 이어 붙여 길이를 견주기 (균형점 그림)
+// 왼쪽 거리들(파랑)과 오른쪽 거리들(주황)을 각각 한 줄로 이어 붙여 길이를 견주기 (시소 그림)
 function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
   const leftItems = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9);
   const rightItems = values.map((v, i) => ({ v, i })).filter((o) => o.v > p + 1e-9);

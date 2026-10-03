@@ -1,10 +1,10 @@
-// 막대 그림 ↔ 균형점 그림 변신(morph)을 위한 좌표 계산.
+// 막대 그림 ↔ 시소 그림 변신(morph)을 위한 좌표 계산.
 //
 // 막대 하나는 "자료값 축(u)"과 "막대 순서 축(w)"으로 이루어진 지역 좌표계 위의 직사각형이다.
 //   t = 0    : 막대 그림   (u 축이 위쪽, w 축이 오른쪽)
 //   t = 0.5  : 눕힌 막대   (그림 전체를 시계 방향으로 90° 돌림 → u 축이 오른쪽, 막대가 한 줄씩 아래로)
 //   t = 0.75 : 막대가 끝(자료값)만 남기고 줄어듦 → 평균선과 막대 끝 사이의 칸만 남는다
-//   t = 1    : 균형점 그림 (막대 끝이 추가 되어 저울대 위로 떨어지고, 평균선은 받침점이 됨)
+//   t = 1    : 시소 그림 (막대 끝이 추가 되어 저울대 위로 떨어지고, 평균선은 받침점이 됨)
 // 막대에서 평균선 위/아래의 칸(u가 p와 자료값 사이)은 그대로 남아 "추와 받침점 사이의 거리"가 된다.
 
 export interface Pt {
@@ -29,7 +29,7 @@ export interface Layout {
   O0: Pt;
   U0: number;
   S0: number;
-  // 눕힌 막대 / 균형점 그림
+  // 눕힌 막대 / 시소 그림
   bx: number;
   U1: number;
   rowTop: number;
@@ -77,7 +77,7 @@ export function makeLayout(region: Region, values: number[], extraSlots = 0): La
   const O0 = { x: region.x + (region.w - chartW) / 2 + padL, y: region.y + region.h - padB };
   const U0 = (region.h - padT - padB) / MAX_U;
 
-  // 균형점 그림
+  // 시소 그림
   const U1 = Math.min(60, (region.w - 56) / MAX_U);
   const bx = region.x + (region.w - MAX_U * U1) / 2;
   const beamY = region.y + region.h - 112;
@@ -172,7 +172,7 @@ export interface BeamRect {
   y1: number;
 }
 
-// 지역 좌표 직사각형 → 화면 다각형. target은 균형점 그림에서의 최종 위치.
+// 지역 좌표 직사각형 → 화면 다각형. target은 시소 그림에서의 최종 위치.
 // 눕힌 뒤에는 먼저 가로 범위(u)가 target으로 바뀌고(r1), 그다음 세로 위치가 target으로 내려간다(r2).
 export function localRect(
   L: Layout,
@@ -235,7 +235,7 @@ export function localLine(
   ];
 }
 
-// 글자 위치: 막대 그림에서의 픽셀 오프셋 → 눕힌 막대에서의 오프셋 → (선택) 균형점 그림의 절대 위치
+// 글자 위치: 막대 그림에서의 픽셀 오프셋 → 눕힌 막대에서의 오프셋 → (선택) 시소 그림의 절대 위치
 export function localLabel(
   L: Layout,
   t: number,
