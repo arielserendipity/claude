@@ -67,18 +67,13 @@ interface ModelStageProps {
   // 끄면 막대·추를 같은 중립색으로 그리고 짝 강조를 하지 않는다 (학생이 대응을 스스로 찾을 때).
   pairCues?: boolean;
   hideBalance?: boolean; // 시소 그림을 가린다 (예상한 뒤 공개)
+  hideBars?: boolean; // 막대 그림을 가린다 (시소 그림을 보고 예상한 뒤 공개)
   lockP?: boolean; // 초록색(초록 선·받침점)을 끌어 옮기지 못하게
   allowAddRemove?: boolean; // 막대·추를 더하거나 지울 수 있는지 (끄면 값만 바꿈)
-  // 학생이 막대·추를 각각 따로 골라 표시한다 (짝 강조 없이)
-  picks?: { bars: number[]; weights: number[] };
-  onPick?: (kind: 'bar' | 'weight', i: number) => void;
   tiltScale?: number; // 시소가 기우는 정도 (0~1, 공개할 때 0→1로 움직임)
 }
 
-export type Picks = { bars: number[]; weights: number[] };
-
 export const MAX_ITEMS = 10;
-const PICK = '#4f46e5';
 const NEUTRAL = { fill: '#cbd5e1', stroke: '#475569' };
 // 새 자료의 막대 높이·추 위치는 0부터 10(MAX_U)까지
 const MIN_V = 0;
@@ -104,10 +99,9 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   hint,
   pairCues = true,
   hideBalance = false,
+  hideBars = false,
   lockP = false,
   allowAddRemove = true,
-  picks,
-  onPick,
   tiltScale = 1,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -191,7 +185,6 @@ export const ModelStage: React.FC<ModelStageProps> = ({
       movedRef.current = false;
       return;
     }
-    if (onPick) return onPick(kind, i);
     if (!pairCues) return; // 짝 강조는 짝을 보여 주는 도움이 켜졌을 때만
     onSelect(selected === i ? null : i);
   };
@@ -215,12 +208,11 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     p,
     mean,
     showCells,
-    selected: pairCues && !onPick ? selected : null,
+    selected: pairCues ? selected : null,
     hint,
     pairCues,
     lockP,
     allowAddRemove,
-    picks,
     tiltScale,
     editable,
     canAdd,
@@ -245,10 +237,12 @@ export const ModelStage: React.FC<ModelStageProps> = ({
           <RegionBg region={SIDE_LEFT} />
           <RegionBg region={SIDE_RIGHT} />
           <LinkBadge x={(SIDE_LEFT.x + SIDE_LEFT.w + SIDE_RIGHT.x) / 2} y={SIDE_LEFT.y + SIDE_LEFT.h / 2} />
-          <ModelView L={left} t={0} {...common} />
-          <ModelView L={right} t={1} {...common} />
-          {!hideBalance && <Connectors left={left} right={right} values={values} p={p} hint={hint} />}
-          {hideBalance && <BalanceCover region={SIDE_RIGHT} />}
+          {/* 가린 그림은 아예 그리지 않는다 (초록 선 손잡이처럼 영역 밖으로 나오는 부분까지 감추기 위해) */}
+          {!hideBars && <ModelView L={left} t={0} {...common} />}
+          {!hideBalance && <ModelView L={right} t={1} {...common} />}
+          {!hideBalance && !hideBars && <Connectors left={left} right={right} values={values} p={p} hint={hint} />}
+          {hideBalance && <Cover region={SIDE_RIGHT} title="시소 그림은 잠깐 가려 두었어요" />}
+          {hideBars && <Cover region={SIDE_LEFT} title="막대 그림은 잠깐 가려 두었어요" />}
         </>
       ) : (
         <>
@@ -301,7 +295,6 @@ interface ModelViewProps {
   pairCues: boolean;
   lockP: boolean;
   allowAddRemove: boolean;
-  picks?: Picks;
   tiltScale: number;
   editable: boolean;
   canAdd: boolean;
@@ -324,7 +317,6 @@ function ModelView({
   pairCues,
   lockP,
   allowAddRemove,
-  picks,
   tiltScale,
   editable,
   canAdd,
@@ -348,8 +340,6 @@ function ModelView({
   // 같은 자료의 색·이름표는 짝을 보여 주는 도움이 켜졌을 때만
   const fillOf = (i: number) => (pairCues ? itemColor(i) : NEUTRAL.fill);
   const strokeOf = (i: number) => (pairCues ? itemStroke(i) : NEUTRAL.stroke);
-  const pickedBar = (i: number) => !!picks?.bars.includes(i);
-  const pickedWeight = (i: number) => !!picks?.weights.includes(i);
   const lateR = clamp01((r2 - 0.6) / 0.4);
   const early = 1 - clamp01(r1 * 1.6);
 
@@ -437,12 +427,6 @@ function ModelView({
           const labelI = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 24 }, { x: -20, y: 5 });
           return (
             <g key={`bar-${i}`} opacity={op(i)}>
-              {pickedBar(i) && lateR < 1 && (
-                // 학생이 고른 막대: 둘레에 보라색 테두리
-                <g opacity={1 - lateR} pointerEvents="none">
-                  <polygon points={polyPoints(pts)} fill="none" stroke={PICK} strokeWidth={9} strokeLinejoin="round" />
-                </g>
-              )}
               <polygon
                 data-bar={i}
                 points={polyPoints(pts)}
@@ -537,7 +521,6 @@ function ModelView({
                   select(i, 'weight');
                 }}
               >
-                {pickedWeight(i) && <path d={d} fill="none" stroke={PICK} strokeWidth={9} strokeLinejoin="round" pointerEvents="none" />}
                 <circle cx={cx} cy={wr.y0 - 2} r={4.5} fill="none" stroke={strokeOf(i)} strokeWidth={2.5} />
                 <path d={d} fill={fillOf(i)} stroke={strokeOf(i)} strokeWidth={selected === i ? 3.5 : 1.5} strokeLinejoin="round" />
                 {pairCues && (
@@ -836,8 +819,8 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
   );
 }
 
-// 예상하기: 시소 그림을 가려 둔다 (평평하게 고정된 시소를 보여 주면 이미 균형을 이룬 것으로 오해할 수 있어 아예 덮는다)
-function BalanceCover({ region }: { region: Region }) {
+// 예상하기: 한 그림을 가려 둔다 (평평하게 고정된 시소나 빈 막대를 보여 주면 그 모습으로 오해할 수 있어 아예 덮는다)
+function Cover({ region, title }: { region: Region; title: string }) {
   const cx = region.x + region.w / 2;
   const cy = region.y + region.h / 2;
   return (
@@ -848,7 +831,7 @@ function BalanceCover({ region }: { region: Region }) {
         ?
       </text>
       <text x={cx} y={cy + 44} fontSize={22} textAnchor="middle" fill="#64748b">
-        시소 그림은 잠깐 가려 두었어요
+        {title}
       </text>
       <text x={cx} y={cy + 76} fontSize={18} textAnchor="middle" fill="#94a3b8">
         예상한 뒤 ‘확인하기’를 누르면 보여요
@@ -939,6 +922,7 @@ function GhostWeights({ L, values, onAdd }: { L: Layout; values: number[]; onAdd
         return (
           <g
             key={`ghost-${u}`}
+            data-ghost={u}
             className={values.length === 0 ? 'ghost soft-pulse' : 'ghost'}
             style={{ cursor: 'copy' }}
             onPointerDown={(e) => {
