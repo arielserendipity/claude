@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, Copy, FileDown, KeyRound, Send, Trash2, X } from 'lucide-react';
 import { LogEntry, TeacherNote } from '../types';
-import { PART_TITLE, QUESTIONS, Verdict } from '../lib/questions';
-import { HINT_TEACHER_DESC } from '../lib/hints';
+import { TASKS } from '../lib/questions';
+import { SUPPORT_LEVEL_LABEL, TEACHER_HELP_TEXT } from '../lib/hints';
 
 export const TEACHER_TITLES = {
   A1: '활동 1 — 균형점 모델 예제 풀기',
@@ -21,13 +21,6 @@ interface TeacherPanelProps {
   onClearDeviceData: () => void;
 }
 
-const VERDICT_STYLE: Record<Verdict, string> = {
-  PASS: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-  PARTIAL: 'bg-amber-100 text-amber-800 border-amber-300',
-  RETRY: 'bg-sky-100 text-sky-800 border-sky-300',
-};
-const VERDICT_LABEL: Record<Verdict, string> = { PASS: '통과', PARTIAL: '부분', RETRY: '다시' };
-
 const CSV_COLUMNS: [keyof LogEntry, string][] = [
   ['timestamp', 'Timestamp'],
   ['playerName', 'PlayerName'],
@@ -36,9 +29,9 @@ const CSV_COLUMNS: [keyof LogEntry, string][] = [
   ['failCount', 'FailCount'],
   ['action', 'Action'],
   ['details', 'Details'],
-  ['questionId', 'QuestionId'],
+  ['taskId', 'Task'],
   ['answer', 'Answer'],
-  ['verdict', 'Verdict'],
+  ['context', 'Context'],
   ['teacherLog', 'TeacherLog'],
   ['reasoning', 'Reasoning'],
   ['hint', 'Hint'],
@@ -70,15 +63,15 @@ function doPost(e) {
     if (sheet.getLastRow() === 0) {
       sheet.appendRow([
         "일시", "학생이름", "활동", "레벨", "누적오답수", "행동", "상세내용",
-        "문항", "학생 답", "AI 판정", "교사용 AI 분석", "AI 난이도 조정 사유", "시각 힌트"
+        "탐구 단계", "학생 응답", "응답 조건(JSON)", "교사용 분석", "난이도 조정 사유", "도움·힌트"
       ]);
     }
     var d = JSON.parse(e.postData.contents);
     sheet.appendRow([
       d.timestamp || new Date(), d.playerName || "Unknown", d.activity || "",
       d.level !== undefined ? d.level : "", d.failCount !== undefined ? d.failCount : "",
-      d.action || "", d.details || "", d.questionId || "", d.answer || "",
-      d.verdict || "", d.teacherLog || "", d.reasoning || "", d.hint || ""
+      d.action || "", d.details || "", d.taskId || "", d.answer || "",
+      d.context || "", d.teacherLog || "", d.reasoning || "", d.hint || ""
     ]);
     return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -111,11 +104,11 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
       activity: 'A2',
       action: 'SHEET_TEST',
       details: '구글 스프레드시트 연동 테스트',
-      questionId: 'q1',
-      answer: '테스트 답안',
-      verdict: 'PASS',
-      teacherLog: '테스트용 AI 분석',
-      hint: 'MEAN_LINK',
+      taskId: 'explore',
+      answer: '테스트 응답',
+      context: JSON.stringify({ values: [2, 3, 4, 4, 6, 7, 9], p: 5 }),
+      teacherLog: '테스트용 분석',
+      hint: 'help1',
     };
     fetch(url, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
       .then(() => {
@@ -165,8 +158,10 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
               <div className="font-bold text-slate-800">활동 구성 (학생 화면에는 “활동 1”, “활동 2”만 보입니다)</div>
               <div>{TEACHER_TITLES.A1}</div>
               <div>{TEACHER_TITLES.A2}</div>
-              <div className="text-xs text-slate-500 pt-1">
-                학생에게는 글 힌트가 나가지 않습니다. AI 판정은 ⭐(통과)·반쪽 별(부분)·🔍(다시)로만 보이고, 부족한 개념에 맞는 시각 힌트가 그림 위에서 자동 재생됩니다.
+              <div className="text-xs text-slate-500 pt-1 leading-relaxed">
+                활동 2에서 학생에게는 판정(별·통과)이 보이지 않습니다. 학생은 생각 저장하기 · 확인하기 · 생각 수정하기 · 다음 탐구로 진행하고,
+                다음 탐구는 할 일을 마치면 열립니다. AI는 아래 기록에서 두 그림 연결의 증거(자료값 대응 · 차이 대응 · 근거로 사용)를 교사에게만 보고합니다.
+                도움은 학생이 ‘도움’을 누를 때 한 단계씩({[1, 2, 3, 4].map((k) => SUPPORT_LEVEL_LABEL[k as 1 | 2 | 3 | 4]).join(' → ')}) 제공되고, 시점과 종류가 기록됩니다.
               </div>
             </section>
 
@@ -187,9 +182,7 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-800">{n.playerName}</span>
                       <span className="text-slate-600">{n.title}</span>
-                      {n.verdict && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full border ${VERDICT_STYLE[n.verdict]}`}>{VERDICT_LABEL[n.verdict]}</span>
-                      )}
+                      {n.check && <span className="text-xs px-2 py-0.5 rounded-full border bg-rose-50 text-rose-700 border-rose-200">교사 확인 필요</span>}
                       <span className="ml-auto text-xs text-slate-400">{new Date(n.timestamp).toLocaleString('ko-KR')}</span>
                     </div>
                     {n.answer && <div className="mt-2 text-slate-800 bg-indigo-50 rounded-lg px-3 py-2 whitespace-pre-wrap">“{n.answer}”</div>}
@@ -202,32 +195,36 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
             <section className="rounded-2xl border border-slate-200">
               <button onClick={() => setShowRubric((v) => !v)} className="w-full flex items-center gap-2 p-4 font-bold text-slate-800">
                 {showRubric ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                활동 2 문항 · 예시 답안 · 채점 기준 · 자동 시각 힌트
+                활동 2 탐구 구성 · 살펴볼 것 · 도움 단계
               </button>
               {showRubric && (
                 <div className="px-4 pb-4 space-y-4">
-                  <div className="text-xs text-slate-500">기본 자료: 2, 3, 4, 4, 6, 7, 9 (평균 5) · 모자란 양 3+2+1+1=7, 넘친 양 1+2+4=7</div>
-                  {QUESTIONS.map((q) => (
-                    <div key={q.id} className="space-y-1">
+                  <div className="text-xs text-slate-500">
+                    기본 자료: 2, 3, 4, 4, 6, 7, 9 (평균 5). 기준 4: 넘침 10 · 모자람 3 / 기준 5: 7 · 7 / 기준 6: 4 · 11. 초록 선(기준선)은 평균이 아닌 곳에도 놓일 수 있습니다.
+                  </div>
+                  {TASKS.map((t) => (
+                    <div key={t.id} className="space-y-1">
                       <div className="font-bold">
-                        {q.label}. {q.prompt}
+                        {t.label}. {t.title}
                       </div>
-                      <div className="text-slate-600">예시 답안: {q.modelAnswer}</div>
-                      <ul className="list-disc pl-5 text-xs text-slate-500">
-                        {q.ideas.map((i) => (
-                          <li key={i.id}>
-                            <span className="text-slate-700">
-                              [{PART_TITLE[i.part]}] “{i.ask}”
-                            </span>{' '}
-                            — {i.teacher}
-                            <br />
-                            인정 예: {i.accept}
-                            <br />
-                            🔍 2회 뒤 힌트: {HINT_TEACHER_DESC[i.hint]}
-                            {i.hintTarget != null ? ` (자료 ${i.hintTarget})` : ''}
+                      <div className="text-slate-700">발문: {t.prompt}</div>
+                      {t.steps.map((s) => (
+                        <div key={s.id} className="text-xs text-slate-600">
+                          · [{s.title}] {s.ask}
+                        </div>
+                      ))}
+                      <div className="text-xs text-slate-500">의도: {t.goal}</div>
+                      <div className="text-xs text-slate-500">살펴볼 것: {t.look}</div>
+                      <ol className="list-decimal pl-5 text-xs text-slate-500">
+                        {t.help.map((h, k) => (
+                          <li key={k}>
+                            {SUPPORT_LEVEL_LABEL[(k + 1) as 1 | 2 | 3]}: {h}
                           </li>
                         ))}
-                      </ul>
+                        <li>
+                          {SUPPORT_LEVEL_LABEL[4]}: {TEACHER_HELP_TEXT}
+                        </li>
+                      </ol>
                     </div>
                   ))}
                 </div>

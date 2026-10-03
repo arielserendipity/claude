@@ -1,4 +1,4 @@
-import type { QuestionId, Verdict } from './lib/questions';
+import type { TaskId } from './lib/questions';
 
 export interface Block {
   id: string;
@@ -22,12 +22,12 @@ export interface LogEntry {
   failCount?: number;
   action: string;
   details: string;
-  questionId?: QuestionId | '';
-  answer?: string;
-  verdict?: Verdict | '';
+  taskId?: TaskId | ''; // 활동 2 탐구 단계
+  answer?: string; // 학생 응답 (글·선택)
+  context?: string; // 응답 당시의 조건 (JSON): 제출 차수, 자료값, 실제 초록색 위치, 예상·공개 시점, 표시한 부분, 응답 전에 본 도움 등
   teacherLog?: string;
   reasoning?: string;
-  hint?: string;
+  hint?: string; // 실제로 제공·재생한 도움이나 힌트
 }
 
 export type AddLog = (action: string, details?: string, extraData?: Partial<LogEntry>) => void;
@@ -48,7 +48,7 @@ export interface SolvedProblem {
   solvedAt: string;
 }
 
-// 교사용 대시보드에만 보이는 AI 분석 기록
+// 교사용 대시보드에만 보이는 분석 기록 (학생에게는 판정을 보여 주지 않음)
 export interface TeacherNote {
   id: string;
   timestamp: string;
@@ -56,6 +56,6 @@ export interface TeacherNote {
   activity: ActivityId;
   title: string;
   body: string;
-  verdict?: Verdict;
   answer?: string;
+  check?: boolean; // 교사 확인 필요
 }
