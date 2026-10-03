@@ -68,6 +68,9 @@ interface ModelStageProps {
 
 export const MAX_ITEMS = 10;
 const SPOTLIGHT = '#facc15';
+// 새 자료의 막대 높이·추 위치는 0부터 10(MAX_U)까지
+const MIN_V = 0;
+const clampV = (u: number) => Math.max(MIN_V, Math.min(MAX_U, Math.round(u)));
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
@@ -138,8 +141,8 @@ export const ModelStage: React.FC<ModelStageProps> = ({
       let next = lastRef.current;
       if (drag.kind === 'line') next = snapP((L.O0.y - pt.y) / L.U0);
       if (drag.kind === 'fulcrum') next = snapP((pt.x - L.bx) / L.U1);
-      if (drag.kind === 'bar') next = Math.max(1, Math.min(MAX_U, Math.round((L.O0.y - pt.y) / L.U0)));
-      if (drag.kind === 'weight') next = Math.max(1, Math.min(MAX_U, Math.round((pt.x - L.bx) / L.U1)));
+      if (drag.kind === 'bar') next = clampV((L.O0.y - pt.y) / L.U0);
+      if (drag.kind === 'weight') next = clampV((pt.x - L.bx) / L.U1);
       if (next === lastRef.current) return;
       movedRef.current = true;
       lastRef.current = next;
@@ -179,7 +182,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     e.preventDefault();
     const pt = toSvg(e.clientX, e.clientY);
     if (!pt || !onAddValue) return;
-    onAddValue(Math.max(1, Math.min(MAX_U, Math.round((L.O0.y - pt.y) / L.U0))));
+    onAddValue(clampV((L.O0.y - pt.y) / L.U0));
   };
   const addWeight = (v: number) => onAddValue?.(v);
   const removeItem = (i: number) => {
@@ -417,6 +420,26 @@ function ModelView({
                   select(i);
                 }}
               />
+              {v === 0 && lateR < 1 && (() => {
+                // 높이가 0인 막대도 보이도록 바닥에 굵은 선을 긋는다
+                const [a, b] = localLine(L, t, 0, i + g, i + g + f);
+                return (
+                  <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={itemStroke(i)} strokeWidth={6} strokeLinecap="round" opacity={1 - lateR} pointerEvents="none" />
+                );
+              })()}
+              {canDrag && (
+                // 막대 윗부분(0인 막대는 바닥 바로 위)을 잡아 끌 수 있는 넉넉한 손잡이 영역
+                <polygon
+                  points={polyPoints(localRect(L, t, top, Math.min(top + 0.8, MAX_U + 0.4), i + g, i + g + f, weightRect(L, i, v)))}
+                  fill="transparent"
+                  style={{ cursor: 'ns-resize' }}
+                  onPointerDown={(e) => startDrag(e, 'bar', L, i)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    select(i);
+                  }}
+                />
+              )}
               {early > 0 &&
                 innerIntegers(0, top).map((k) => {
                   const [a, b] = localLine(L, t, k, i + g, i + g + f);
@@ -846,7 +869,7 @@ function GhostWeights({ L, values, onAdd }: { L: Layout; values: number[]; onAdd
   const base = L.beamY - BEAM_HALF;
   return (
     <g>
-      {Array.from({ length: MAX_U }, (_, k) => k + 1).map((u) => {
+      {Array.from({ length: MAX_U - MIN_V + 1 }, (_, k) => k + MIN_V).map((u) => {
         const k = counts.get(u) ?? 0;
         const cx = L.bx + u * L.U1;
         const y0 = base - (k + 1) * L.wH;
