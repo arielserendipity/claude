@@ -26,7 +26,7 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
   const [isHintActive, setIsHintActive] = useState(false);
   const [hasDragged, setHasDragged] = useState(false);
 
-  // 단계마다 오답 수를 세어 2회부터 시각 힌트를 연다 (학생에게 글로 알려주지 않음)
+  // 단계마다 오답 수를 세어 3회부터 시각 힌트를 연다 (학생에게 글로 알려주지 않음)
   const [levelFailCount, setLevelFailCount] = useState(0);
   const [levelAttempts, setLevelAttempts] = useState(1);
   const [currentLevelLogs, setCurrentLevelLogs] = useState<DragLog[]>([]);
@@ -38,9 +38,9 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
   const log: AddLog = (action, details = '', extra) =>
     addLog(action, details, { activity: 'A1', level, failCount: levelFailCount, ...extra });
 
-  // 교사 미리보기에서는 힌트를 처음부터 모두 볼 수 있다
-  // 3번 틀리면 거리 곡선, 5번 틀리면 왼쪽·오른쪽 거리의 합 막대까지
-  const hintLevel: 0 | 1 | 2 = teacherMode || levelFailCount >= 5 ? 2 : levelFailCount >= 3 ? 1 : 0;
+  // 3번 틀리면 거리 곡선만, 5번 틀려야 왼쪽·오른쪽 거리의 합 막대까지 (교사 미리보기도 같은 기준).
+  // 교사 미리보기에서는 💡 단추가 처음부터 있어 거리 곡선을 미리 볼 수 있다.
+  const hintLevel: 0 | 1 | 2 = levelFailCount >= 5 ? 2 : teacherMode || levelFailCount >= 3 ? 1 : 0;
 
   const average = useMemo(() => {
     if (blocks.length === 0) return 0;
