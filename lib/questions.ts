@@ -121,7 +121,7 @@ export const TASKS: TaskDef[] = [
     help: [
       '어느 부분을 보고 그렇게 예상했나요?',
       '받침점 오른쪽 추들과 왼쪽 추들이 받침점에서 얼마나 떨어져 있는지 살펴보세요.',
-      '시소 그림에 받침점과 추 사이의 거리를 칸으로 표시하고, 양쪽 거리를 한 줄로 모아 보여 줄게요.',
+      '시소 그림에 받침점부터 각 추까지의 거리를 곡선과 숫자로 표시했어요. 오른쪽 숫자들과 왼쪽 숫자들을 비교해 보세요.',
     ],
   },
   {
@@ -142,25 +142,26 @@ export const TASKS: TaskDef[] = [
     help: [
       '내 자료의 평균은 얼마인가요? 초록색을 그곳에 두면 두 그림이 어떻게 되나요?',
       "'칸' 단추를 눌러 넘친 칸과 모자란 칸, 오른쪽 거리와 왼쪽 거리를 세어 보세요.",
-      '칸 표시와 양쪽 거리의 합을 보여 줄게요. 처음 자료에서도 비교해 보세요.',
+      '막대 그림에서 부족한 칸과 넘친 칸을, 시소 그림에서 왼쪽 거리와 오른쪽 거리를 각각 한 줄로 모아 합을 비교해 보세요. 받침점부터 각 추까지의 거리는 곡선과 숫자로 표시했어요. 처음 자료에서도 비교해 보세요.',
     ],
   },
   {
     id: 'change',
     label: '4',
     title: '자료를 바꾸어 시험하기',
-    prompt: '받침점은 5에 그대로 두세요. 자료 두 개를 바꾼 뒤에도 시소가 평평하게 해 보세요. 바꾸기 전에 방법을 예상해 보세요.',
+    prompt: '받침점은 5에 그대로 두세요. 자료의 개수나 값을 바꾼 뒤에도 시소가 평평하게 해 보세요. 바꾸기 전에 방법을 예상해 보세요.',
     steps: [
-      { id: 'method', title: '바꾸기 전 예상', ask: '어떻게 바꾸면 시소가 계속 평평할까요? 바꾸기 전에 방법을 예상해 써 보세요.' },
+      { id: 'method', title: '바꾸기 전 예상', ask: '자료를 더하거나 빼거나 값을 옮기면 시소가 어떻게 될까요? 평평하게 하려면 어떻게 바꾸면 될지 바꾸기 전에 방법을 예상해 써 보세요.' },
       { id: 'reflect', title: '해 본 뒤', ask: '예상한 방법과 같았나요? 평평하게 하는 다른 방법도 찾아보고, 알게 된 것을 써 보세요.' },
     ],
     goal:
-      "받침점(5)을 고정한 채 두 자료를 바꾸며 시소가 평평한 상태를 지키는 방법을 시험한다(O'Dell 2012의 '균형을 지키며 옮기기', Van de Walle 외의 '평균이 같은 다른 자료 찾기'). 한쪽을 늘린 만큼 다른 쪽을 줄이면 넘침의 합 = 모자람의 합이 그대로다.",
-    look: '바꾸기 전 방법 예상, 바꾼 자료(전후)와 결과(평평한지), 여러 방법을 찾았는지, 늘린 만큼 줄이는 보상 관계를 말하는지.',
+      "받침점(5)을 고정한 채 자료의 개수나 값을 바꾸며(자료 더하기·지우기·값 옮기기) 시소가 평평한 상태를 지키는 방법을 시험한다(O'Dell 2012의 '균형을 지키며 옮기기'와 '받침점 위에 자료 더하기', Van de Walle 외의 '평균이 같은 다른 자료 찾기'). 값을 옮길 때는 한 자료를 올린 만큼 다른 자료를 내리고, 자료를 더할 때는 받침점(5) 위에 놓거나 받침점에서 같은 거리만큼 떨어진 두 값(예: 4와 6)을 함께 더하면 넘침의 합 = 모자람의 합이 그대로다.",
+    look:
+      '바꾸기 전 방법 예상, 바꾼 자료(전후)와 결과(평평한지), 여러 방법을 찾았는지, 올린 만큼 내리는 보상 관계나 5 위에 더하기·양쪽에 같은 거리로 더하기를 말하는지. 예) 5를 더함(평평), 4와 6을 더함(평평), 9→10과 2→1(평평), 2를 지움(기움).',
     help: [
-      '시소가 어느 쪽으로 기울었나요? 어느 자료를 바꾸어서 그렇게 되었을까요?',
-      '자료 하나를 올리면 시소가 어느 쪽으로 기우는지 보고, 다른 자료로 되돌려 보세요.',
-      '칸 표시와 양쪽 거리의 합을 보여 줄게요. 양쪽을 비교해 보세요.',
+      '시소가 어느 쪽으로 기울었나요? 자료를 더하거나 빼거나 옮긴 것 중 무엇 때문에 그렇게 되었을까요?',
+      '자료 하나를 더하거나 값을 옮기면 시소가 어느 쪽으로 기우는지 보고, 처음 자료로 되돌려 다시 해 보세요.',
+      '막대 그림에서 부족한 칸과 넘친 칸을, 시소 그림에서 왼쪽 거리와 오른쪽 거리를 각각 한 줄로 모아 합을 비교해 보세요. 받침점부터 각 추까지의 거리는 곡선과 숫자로 표시했어요. 양쪽을 비교해 보세요.',
     ],
   },
 ];
@@ -194,6 +195,28 @@ export const barSidesAt = (values: number[], p: number): BarSides => TILT_TO_SID
 // 예상하기에서 확인했을 때 보이는 결과
 export const outcomeAt = (task: PredictTaskId, values: number[], p: number): Prediction =>
   task === 'predictSeesaw' ? tiltAt(values, p) : barSidesAt(values, p);
+
+// 4번 자료 바꾸기: 처음 자료와 비교해 더한 값·뺀 값 (같은 값은 개수로 비교; 값을 옮기면 뺀 값과 더한 값으로 나타남)
+export function diffData(before: number[], after: number[]) {
+  const cnt = new Map<number, number>();
+  before.forEach((v) => cnt.set(v, (cnt.get(v) ?? 0) + 1));
+  after.forEach((v) => cnt.set(v, (cnt.get(v) ?? 0) - 1));
+  const removed: number[] = [];
+  const added: number[] = [];
+  cnt.forEach((c, v) => {
+    for (let k = 0; k < Math.abs(c); k++) (c > 0 ? removed : added).push(v);
+  });
+  removed.sort((a, b) => a - b);
+  added.sort((a, b) => a - b);
+  return { added, removed };
+}
+
+export function describeDiff(before: number[], after: number[]) {
+  const { added, removed } = diffData(before, after);
+  if (!added.length && !removed.length) return '바꾼 것 없음';
+  if (added.length === removed.length) return removed.map((r, k) => `${r}→${added[k]}`).join(', '); // 값만 옮긴 경우
+  return [added.length ? `더한 자료 ${added.join(', ')}` : '', removed.length ? `뺀 자료 ${removed.join(', ')}` : ''].filter(Boolean).join(' · ');
+}
 
 // 3번 나만의 자료: 수를 구하는 칸(막대 그림에서·시소 그림에서)에 꼭 있어야 할 것이 빠졌는지 본다.
 // 빠진 것이 있으면 '틀림'으로 보고 도움을 한 단계 올린다(학생에게 판정을 보여 주지는 않음).
@@ -286,7 +309,9 @@ const BEAM_SIDE = /(거리|떨어|오른|왼|받침|기울|내려)/;
 const SAME_VALUE = /(같은\s*(수|값|자리|위치|높이|눈금)|높이[^.,]{0,10}(자리|위치|눈금)|눈금|[0-9]\s*(에|자리|위치))/;
 const UP = '(올리|올려|늘리|늘려|더하|더해|크게|높이|높여)';
 const DOWN = '(내리|내려|줄이|줄여|빼|작게|낮추|낮춰)';
-const COMPENSATE = new RegExp(`(${UP}.{0,18}${DOWN}|${DOWN}.{0,18}${UP}|같은\\s*만큼|그만큼|똑같이\\s*(바꾸|움직))`);
+const COMPENSATE = new RegExp(
+  `(${UP}.{0,18}${DOWN}|${DOWN}.{0,18}${UP}|같은\\s*만큼|그만큼|똑같이\\s*(바꾸|움직)|(받침점|5|다섯)[을를에]?\\s*(위에|에)?[^.,]{0,10}(놓|더하|더해|넣|추가)|양쪽에[^.,]{0,12}(하나씩|똑같이|같은)|같은\\s*거리)`
+);
 const COMPARE = /(넘|모자|부족|많|적|크|작|비교|무거|가벼|기울|내려)/;
 const GENERAL = /(항상|언제나|모든|어떤\s*자료|바뀌어도|달라도|마찬가지|역시|똑같이\s*나타)/;
 
@@ -327,7 +352,8 @@ export function ruleAnalyze(input: AnalysisInput): Analysis {
     }
   } else if (input.taskId === 'change') {
     usedAsEvidence = COMPENSATE.test(text) ? 'yes' : COMPARE.test(text) ? 'partial' : 'no';
-    if (input.before) evidenceBits.push(`바꾸기 전 [${input.before.join(', ')}] → 후 [${input.values.join(', ')}], 시소: ${CHOICE_LABEL[tiltAt(input.values, input.p)]}`);
+    if (input.before)
+      evidenceBits.push(`바꾸기 전 [${input.before.join(', ')}] → 후 [${input.values.join(', ')}] (${describeDiff(input.before, input.values)}), 시소: ${CHOICE_LABEL[tiltAt(input.values, input.p)]}`);
   } else if (input.taskId === 'custom') {
     const m = meanOf(input.values);
     const s = sidesAt(input.values, m);

@@ -4,7 +4,8 @@ export type HintKey =
   | 'MEAN_LINK' // 초록 선 ↔ 받침점을 함께 반짝이고 화살표로 잇는다
   | 'EXCESS_TO_DISTANCE' // 막대의 넘친 칸 ↔ 추와 받침점 사이 거리(오른쪽)
   | 'DEFICIT_TO_GAP' // 추와 받침점 사이 거리(왼쪽) ↔ 막대 위 모자란 빈칸
-  | 'SUM_BALANCE' // 왼쪽 거리들을 한 줄로, 오른쪽 거리들을 한 줄로 모아 길이 비교
+  | 'SUM_BALANCE' // 양쪽 합 비교: 막대 그림은 부족한 칸·넘친 칸을, 시소 그림은 왼쪽·오른쪽 거리를 각각 한 줄로 모아 길이 비교 + 거리 곡선·숫자
+  | 'DISTANCE_CURVES' // 시소 그림에서 받침점(초록색)부터 각 추까지의 거리를 곡선과 숫자로
   | 'LEVELING' // 넘친 칸이 날아가 모자란 칸을 채워 막대가 고르게 된다
   | 'CELLS_TO_DISTANCE'; // 막대 그림이 시소 그림으로 바뀌며 칸이 거리가 되는 변신
 
@@ -18,6 +19,7 @@ export const HINT_KEYS: HintKey[] = [
   'EXCESS_TO_DISTANCE',
   'DEFICIT_TO_GAP',
   'SUM_BALANCE',
+  'DISTANCE_CURVES',
   'LEVELING',
   'CELLS_TO_DISTANCE',
 ];
@@ -27,7 +29,9 @@ export const HINT_TEACHER_DESC: Record<HintKey, string> = {
   MEAN_LINK: '초록 선과 받침점을 동시에 반짝이고 화살표로 연결',
   EXCESS_TO_DISTANCE: '막대의 넘친 칸과 해당 추-받침점 거리(오른쪽)를 같은 주황색으로 강조·연결',
   DEFICIT_TO_GAP: '추-받침점 거리(왼쪽)와 막대 위 모자란 빈칸을 같은 파란색으로 강조·연결',
-  SUM_BALANCE: '왼쪽 거리들과 오른쪽 거리들을 각각 한 줄로 이어 붙여 길이 비교',
+  SUM_BALANCE:
+    '막대 그림: 모자란 칸들과 넘친 칸들을 각각 한 줄로 이어 붙여 길이·합 비교 / 시소 그림: 왼쪽 거리들과 오른쪽 거리들을 각각 한 줄로 이어 붙여 길이·합 비교, 받침점에서 각 추까지의 거리를 곡선과 숫자로 표시',
+  DISTANCE_CURVES: '시소 그림에서 받침점(초록색)부터 각 추까지의 거리를 곡선과 숫자로 표시 (왼쪽 파랑, 오른쪽 주황)',
   LEVELING: '넘친 칸이 모자란 칸으로 옮겨져 모든 막대가 고르게 되는 애니메이션 (초록색이 평균에 있을 때만)',
   CELLS_TO_DISTANCE: '막대 그림 → (눕히기) → 시소 그림 변신 애니메이션, 칸이 거리로 바뀜',
 };
@@ -67,6 +71,8 @@ export const SUPPORT_KIND_LABEL: Record<string, string> = {
   cells: '칸 표시',
   morph: '변환 애니메이션',
   reveal: '가려 둔 그림 공개',
+  'hint:SUM_BALANCE': '시각 힌트 양쪽 합 비교(막대·시소)와 거리 곡선·숫자',
+  'hint:DISTANCE_CURVES': '시각 힌트 거리 곡선·숫자',
 };
 
 export const supportLabel = (k: string) =>
