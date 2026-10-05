@@ -129,7 +129,7 @@ export const TASKS: TaskDef[] = [
     label: '3',
     title: '나만의 자료로 확인하기',
     prompt:
-      "그림 위 '새로운 자료'를 눌러 막대나 추를 놓아 나만의 자료를 만들어 보세요(활동 1에서 푼 문제를 불러와도 되고, 평균이 자연수가 되게 만들면 쉬워요). 1·2번에서 알아낸 것을 막대 그림과 시소 그림에서 각각 다시 확인해 보세요.",
+      "그림 위 '새로운 자료'를 눌러 막대나 추를 놓아 나만의 자료를 만들어 보세요. 1·2번에서 알아낸 것을 막대 그림과 시소 그림에서 각각 다시 확인해 보세요.",
     steps: [
       { id: 'bar', title: '막대 그림에서', ask: '내 자료와 평균을 쓰고, 초록색을 평균에 두었을 때 넘친 칸의 합과 모자란 칸의 합을 구해 보세요.' },
       { id: 'beam', title: '시소 그림에서', ask: '초록색을 평균에 두었을 때 시소가 어떻게 되는지 쓰고, 오른쪽 거리의 합과 왼쪽 거리의 합을 구해 보세요.' },
@@ -321,7 +321,7 @@ const SENTENCE_SPLIT = /[.!?\n;]/;
 const CLAUSE_SPLIT = /,|이고|이며|그리고|하고|지만|는데/;
 const OVER = /(넘|위로|위에|높|튀어|올라|큰\s*쪽)/;
 const UNDER = /(모자|부족|아래|낮|비어|빈\s*칸|빈칸|비는|작은\s*쪽)/;
-function mappingDirection(text: string) {
+export function mappingDirection(text: string) {
   let forward = false;
   let reversed = false;
   for (const sentence of text.split(SENTENCE_SPLIT)) {
@@ -346,18 +346,18 @@ function mappingDirection(text: string) {
   }
   return { forward, reversed };
 }
-const BAR_SIDE = /(넘|모자|부족|위로|위에|아래|높|낮|칸|튀어|올라|비어|비는)/;
-const BEAM_SIDE = /(거리|떨어|오른|왼|받침|기울|내려|평평|수평|균형)/;
+export const BAR_SIDE = /(넘|모자|부족|위로|위에|아래|높|낮|칸|튀어|올라|비어|비는)/;
+export const BEAM_SIDE = /(거리|떨어|오른|왼|받침|기울|내려|평평|수평|균형)/;
 const SAME_VALUE = /(같은\s*(수|값|자리|위치|높이|눈금)|높이[^.,]{0,10}(자리|위치|눈금)|눈금|[0-9]\s*(에|자리|위치))/;
 const UP = '(올리|올려|늘리|늘려|더하|더해|크게|높이|높여)';
 const DOWN = '(내리|내려|줄이|줄여|빼|작게|낮추|낮춰)';
-const COMPENSATE = new RegExp(
+export const COMPENSATE = new RegExp(
   `(${UP}.{0,18}${DOWN}|${DOWN}.{0,18}${UP}|같은\\s*만큼|그만큼|똑같이\\s*(바꾸|움직)|(받침점|5|다섯)[을를에]?\\s*(위에|에)?[^.,]{0,10}(놓|놔|더하|더해|넣|추가)|양쪽에[^.,]{0,12}(하나씩|똑같이|같은)|하나씩\\s*(더|놓|놔|넣|추가)|같은\\s*거리)`
 );
-const COMPARE = /(넘|모자|부족|많|적|크|작|비교|무거|가벼|기울|내려|눌려|평평|같)/;
+export const COMPARE = /(넘|모자|부족|많|적|크|작|비교|무거|가벼|기울|내려|눌려|평평|같)/;
 // 초등학생이 자주 보이는 생각: 큰 수가 있으니 그쪽이 내려간다(받침점과의 거리·합은 보지 않음)
-const VALUE_ONLY = /[0-9]+\s*[가이]?\s*(커서|크니까|크기 때문|큰데|더 커)/;
-const GENERAL = /(항상|언제나|모든|어떤\s*자료|바뀌어도|달라도|마찬가지|역시|똑같이\s*나타)/;
+export const VALUE_ONLY = /[0-9]+\s*[가이]?\s*(커서|크니까|크기 때문|큰데|더 커)/;
+export const GENERAL = /(항상|언제나|모든|어떤\s*자료|바뀌어도|달라도|마찬가지|역시|똑같이\s*나타)/;
 
 export function ruleAnalyze(input: AnalysisInput): Analysis {
   // 예상 고르기 줄('[예상] …')은 학생이 쓴 글이 아니므로 글 분석에서 뺀다
