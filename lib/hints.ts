@@ -57,7 +57,7 @@ export type SupportKind =
   | 'help2'
   | 'help3'
   | 'help4'
-  | 'cells' // 칸(넘침·모자람 / 거리) 표시
+  | 'cells' // 칸 표시: 막대 그림에는 칸(넘침·모자람), 시소 그림에는 거리 곡선과 숫자
   | 'morph' // 막대 그림 → 시소 그림 변환 애니메이션
   | 'reveal' // 가려 둔 그림(시소 그림 또는 막대 그림) 공개
   | `hint:${HintKey}`
@@ -68,7 +68,7 @@ export const SUPPORT_KIND_LABEL: Record<string, string> = {
   help2: '도움2 대상 제안',
   help3: '도움3 대응 보여 주기',
   help4: '도움4 선생님',
-  cells: '칸 표시',
+  cells: '칸 표시(막대 그림의 칸, 시소 그림의 거리 곡선)',
   morph: '변환 애니메이션',
   reveal: '가려 둔 그림 공개',
   'hint:SUM_BALANCE': '시각 힌트 양쪽 합 비교(막대·시소)와 거리 곡선·숫자',

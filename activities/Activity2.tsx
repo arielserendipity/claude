@@ -126,7 +126,7 @@ const STEP_NOTE: Record<string, string> = {
   'change.reflect': '시소를 평평하게 지키려고 자료를 어떻게 바꾸었는지 써 보세요.',
   'custom.bar': '내 자료의 평균과 넘친 칸의 합, 모자란 칸의 합을 구해서 써 보세요.',
   'custom.beam': '평균에서 시소가 어떻게 되는지와 오른쪽·왼쪽 거리의 합을 써 보세요.',
-  'custom.link': '자료가 바뀌어도 똑같이 나타나는 것(예: 시소가 평평해요)을 써 보세요.',
+  'custom.link': '평균이 막대 그림과 시소 그림에서 각각 어떤 뜻인지, 두 그림이 어떻게 이어지는지 써 보세요.',
 };
 
 const initialState = (): A2State => ({
@@ -236,6 +236,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   // 네 탐구를 모두 마치면 마무리 화면으로 바뀐다 ('내 활동 다시 보기'로 돌아갈 수 있음)
   const allDone = TASKS.every((t) => st.done[t.id]);
   const [showFinish, setShowFinish] = useState(allDone);
+  const [teacherAsk, setTeacherAsk] = useState<{ onPass: () => void } | null>(null); // 선생님 코드 입력창
   useEffect(() => {
     if (allDone) setShowFinish(true);
   }, [allDone]);
@@ -247,7 +248,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const helpCells = cellsAtHelp(openId, helpLevel); // 도움으로 켜진 칸 표시 (막대 그림에만)
   const isUnlocked = (idx: number) => teacherMode || idx === 0 || st.done[TASKS[idx - 1].id];
   // 글 칸을 저장했고 규칙 검사를 통과했는지 (예전 기록처럼 검사 결과가 없으면 통과로 본다)
-  const stepOk = (key: string) => !!st.saved[key] && (st.ok[key] ?? true);
+  const stepOk = (key: string) => !!st.saved[key] && (teacherMode || (st.ok[key] ?? true)); // 교사 미리보기는 막지 않는다
 
   // ---------- 지원 이력 ----------
   const supportsRef = useRef(st.supports);
@@ -466,7 +467,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
 
   // 글 칸 저장 (처음 저장 또는 수정)
   const saveText = (t: TaskDef, stepId: string, key: string, extra?: Partial<AnalysisInput>, meta?: Record<string, unknown>) => {
-    const text = (st.drafts[key] ?? '').trim();
+    const text = (st.drafts[key] ?? '').trim() || (teacherMode ? '(교사 미리보기)' : '');
     const prev = st.saved[key];
     if (!text) return;
     const kind: 'first' | 'revised' = prev ? 'revised' : 'first';
@@ -486,7 +487,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         teacherLog: res.why.join(' / '),
       });
       // 4번 '바꾸기 전 예상'은 아직 바꾼 자료가 없어서 도움을 올리지 않고 써야 할 것만 알려 준다
-      if (!res.ok && key !== 'change.method') raiseHelp(`${stepTitle}: ${res.why.join(', ')}`);
+      // (교사 미리보기에서 비워 둔 채 저장한 칸은 도움을 올리지 않는다)
+      if (!res.ok && key !== 'change.method' && !(teacherMode && text === '(교사 미리보기)')) raiseHelp(`${stepTitle}: ${res.why.join(', ')}`);
     }
   };
 
@@ -546,14 +548,16 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     patch((s) => ({ rounds: { ...s.rounds, [roundKey(id, r)]: { ...s.rounds[roundKey(id, r)], ...next } } }));
 
   const savePrediction = () => {
-    if (!isPredictTask(openId) || round == null || !rs?.prediction) return;
+    if (!isPredictTask(openId) || round == null || !rs) return;
     const key = `${openId}.reason.${round}`;
-    const text = (st.drafts[key] ?? '').trim();
-    if (!text) return; // 까닭은 꼭 쓴다
+    // 교사 미리보기: 고르지 않거나 쓰지 않아도 눌러서 그냥 넘어갈 수 있다 (모든 문항을 빨리 둘러보기)
+    const prediction: Prediction | undefined = rs.prediction ?? (teacherMode ? outcomeAt(openId, PREDICT[openId].values, round) : undefined);
+    const text = (st.drafts[key] ?? '').trim() || (teacherMode ? '(교사 미리보기)' : '');
+    if (!prediction || !text) return; // 예상과 까닭은 꼭 쓴다
     const at = now();
     const prev = st.saved[key]; // 다시 예상하는 경우 이전 까닭이 남아 있다
     const attempt = prev ? prev.revisions + 2 : 1;
-    setRound(openId, round, { predictionSaved: true, predictionAt: at });
+    setRound(openId, round, { prediction, predictionSaved: true, predictionAt: at });
     patch((s) => ({
       saved: { ...s.saved, [key]: prev ? { ...prev, latest: text, revisions: prev.revisions + 1 } : { first: text, latest: text, firstAt: at, revisions: 0 } },
     }));
@@ -564,33 +568,38 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       kind: prev ? 'revised' : 'first',
       text,
       attempt,
-      extra: { values: PREDICT[openId].values, p: round, round, prediction: rs.prediction, revealed: false },
+      extra: { values: PREDICT[openId].values, p: round, round, prediction, revealed: false },
       meta: { predictionAt: at, tries: rs.attempts ?? 1 },
     });
+    if (teacherMode) doReveal(prediction, text); // 교사 미리보기는 저장하면 바로 공개하고 넘어간다
   };
   const reveal = () => {
     if (!isPredictTask(openId) || round == null || !rs) return;
-    // 고른 예상과 까닭이 모두 맞아야 지나간다
-    const reasonText = st.saved[`${openId}.reason.${round}`]?.latest ?? '';
-    const j = judgePrediction(openId, round, rs.prediction, reasonText);
-    setRound(openId, round, { revealed: true, revealedAt: now(), passed: j.ok });
+    doReveal(rs.prediction, st.saved[`${openId}.reason.${round}`]?.latest ?? '');
+  };
+  const doReveal = (prediction: Prediction | undefined, reasonText: string) => {
+    if (!isPredictTask(openId) || round == null) return;
+    // 고른 예상과 까닭이 모두 맞아야 지나간다 (교사 미리보기는 막지 않는다)
+    const j = judgePrediction(openId, round, prediction, reasonText);
+    const passed = j.ok || teacherMode;
+    setRound(openId, round, { revealed: true, revealedAt: now(), passed });
     noteSupport('reveal');
     setView('side');
     setP(round);
     if (openId === 'predictSeesaw') animateTilt();
     const actual = outcomeAt(openId, PREDICT[openId].values, round);
-    addLog('REVEAL', `초록색 ${round}: 예상 ${rs.prediction ? predictionLabel(rs.prediction) : '-'} / 실제 ${predictionLabel(actual)}`, {
+    addLog('REVEAL', `초록색 ${round}: 예상 ${prediction ? predictionLabel(prediction) : '-'} / 실제 ${predictionLabel(actual)}`, {
       activity: 'A2',
       taskId: openId,
     });
-    addLog('JUDGE', `초록색 ${round}: ${j.ok ? '예상과 까닭이 맞음' : `틀림 (${j.why.join(' / ')})`}`, {
+    addLog('JUDGE', `초록색 ${round}: ${j.ok ? '예상과 까닭이 맞음' : `틀림 (${j.why.join(' / ')})`}${teacherMode && !j.ok ? ' · 교사 미리보기라 넘어감' : ''}`, {
       activity: 'A2',
       taskId: openId,
       teacherLog: j.why.join(' / '),
     });
     // 예상이 결과와 다르거나('아직 모르겠어요' 포함) 까닭이 맞지 않으면 도움을 한 단계 올린다
-    if (!j.ok) {
-      raiseHelp(`초록색 ${round}: 예상 ${rs.prediction ? predictionLabel(rs.prediction) : '-'}, 결과 ${predictionLabel(actual)} · ${j.why.join(', ')}`);
+    if (!passed) {
+      raiseHelp(`초록색 ${round}: 예상 ${prediction ? predictionLabel(prediction) : '-'}, 결과 ${predictionLabel(actual)} · ${j.why.join(', ')}`);
     }
   };
   // 틀렸을 때: 같은 초록색에서 가려 둔 그림을 다시 가리고 처음부터 다시 예상한다 (이전 까닭은 기록에 남는다)
@@ -611,12 +620,17 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setP(round);
     addLog('RETRY_ROUND', `초록색 ${round}: 다시 예상하기 (${tries}번째)`, { activity: 'A2', taskId: openId });
   };
-  // 도움 4단계까지 막힌 학생을 선생님이 확인하고 넘겨 줄 때 (교사 코드)
-  const askTeacher = (onPass: () => void) => {
-    const code = window.prompt('선생님 코드를 입력하세요');
-    if (code == null) return;
-    if (isTeacherName(code)) onPass();
-    else window.alert('코드가 맞지 않아요.');
+  // 도움 4단계까지 막힌 학생을 선생님이 확인하고 넘겨 줄 때 (교사 코드). 입력한 글자는 학생이 볼 수 없게 가려서 보여 준다.
+  const askTeacher = (onPass: () => void) => setTeacherAsk({ onPass });
+  const submitTeacherCode = (code: string) => {
+    if (!isTeacherName(code)) {
+      addLog('TEACHER_CODE_WRONG', '선생님 코드가 맞지 않음', { activity: 'A2', taskId: openId });
+      return false;
+    }
+    const pass = teacherAsk?.onPass;
+    setTeacherAsk(null);
+    pass?.();
+    return true;
   };
   const teacherPassStep = (key: string) => {
     patch((s) => ({ ok: { ...s.ok, [key]: true } }));
@@ -638,7 +652,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const methodOk = stepOk('change.method');
   const changeEditable = openId === 'change' && methodOk;
   // 시소가 평평하게 된 적이 있어야 정리하는 글로 넘어간다
-  const hasFlat = st.checks.some((c) => c.tilt === 'flat') || !!st.ok['change.flat'];
+  const hasFlat = teacherMode || st.checks.some((c) => c.tilt === 'flat') || !!st.ok['change.flat'];
   const diff = diffData(DEFAULT_VALUES, st.work); // 더한 자료·뺀 자료 (값을 옮기면 뺀 값과 더한 값으로 나타남)
   const changed = diff.added.length + diff.removed.length > 0;
   const canCheckChange = changed && st.work.length >= 2;
@@ -746,8 +760,9 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         onChange={(v) => setDraft(key, v)}
         saved={st.saved[key]}
         editing={!!editing[key]}
-        disabled={opts.disabled}
+        disabled={opts.disabled && !teacherMode}
         disabledHint={opts.disabledHint}
+        allowEmpty={teacherMode}
         onEdit={() => {
           setEditing((e) => ({ ...e, [key]: true }));
           setDraft(key, st.saved[key]?.latest ?? '');
@@ -808,10 +823,10 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                 className="w-full rounded-lg border-2 border-slate-200 bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none px-3 py-2 text-[16px] leading-relaxed resize-y"
               />
             </div>
-            <ActionButton onClick={savePrediction} disabled={!rs.prediction || !reasonText} icon={<Save size={18} />}>
+            <ActionButton onClick={savePrediction} disabled={!teacherMode && (!rs.prediction || !reasonText)} icon={<Save size={18} />}>
               예상 저장하기
             </ActionButton>
-            {rs.prediction && !reasonText && <span className="font-korean text-sm text-slate-500 -mt-1">예상과 까닭을 함께 써야 저장할 수 있어요.</span>}
+            {!teacherMode && rs.prediction && !reasonText && <span className="font-korean text-sm text-slate-500 -mt-1">예상과 까닭을 함께 써야 저장할 수 있어요.</span>}
           </>
         ) : (
           <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 font-korean text-[15px] text-slate-700 flex items-center gap-2 flex-wrap">
@@ -913,23 +928,19 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
 
           <button
             onClick={toggleCells}
-            aria-label="칸"
-            className={`h-11 pl-2 pr-3 rounded-xl border-2 flex items-center gap-1 font-korean transition-all ${
+            aria-label="힌트 on/off"
+            aria-pressed={showCells}
+            className={`h-11 pl-2 pr-3 rounded-xl border-2 flex items-center gap-1.5 font-korean transition-all ${
               showCells ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
             }`}
           >
-            <CellsIcon active={showCells} /> 칸
-          </button>
-
-          <button
-            onClick={() => {
-              cleanStage();
-              addLog('RESET_STAGE', '', { activity: 'A2', taskId: openId });
-            }}
-            aria-label="처음 상태로"
-            className="w-11 h-11 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center text-slate-500"
-          >
-            <RotateCcw size={20} />
+            <CellsIcon active={showCells} />
+            <span>
+              힌트{' '}
+              <b className={showCells ? 'text-orange-700' : 'text-slate-300'}>on</b>
+              <span className="text-slate-300">/</span>
+              <b className={showCells ? 'text-slate-300' : 'text-slate-600'}>off</b>
+            </span>
           </button>
 
           {isPredictTask(openId) && pset && (
@@ -1239,6 +1250,52 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
           );
         })}
       </aside>
+
+      {teacherAsk && <TeacherCodeDialog onSubmit={submitTeacherCode} onCancel={() => setTeacherAsk(null)} />}
+    </div>
+  );
+}
+
+// 선생님 코드 입력창: 입력한 글자는 비밀번호 칸처럼 ●로 가려서 보여 준다
+function TeacherCodeDialog({ onSubmit, onCancel }: { onSubmit: (code: string) => boolean; onCancel: () => void }) {
+  const [code, setCode] = useState('');
+  const [wrong, setWrong] = useState(false);
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="선생님 코드">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!code) return;
+          if (!onSubmit(code)) {
+            setWrong(true);
+            setCode('');
+          }
+        }}
+        className="bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 w-full max-w-sm flex flex-col gap-4"
+      >
+        <h3 className="font-korean text-xl text-slate-800">선생님 코드를 입력하세요</h3>
+        <input
+          type="password"
+          autoFocus
+          autoComplete="off"
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setWrong(false);
+          }}
+          aria-label="선생님 코드"
+          className="w-full rounded-lg border-2 border-slate-200 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none px-3 py-2 text-[18px] tracking-widest"
+        />
+        {wrong && <span className="font-korean text-sm text-rose-600">코드가 맞지 않아요. 다시 입력해 주세요.</span>}
+        <div className="flex gap-2 justify-end">
+          <button type="button" onClick={onCancel} className="px-4 py-2 rounded-full font-korean text-slate-500 hover:bg-slate-100">
+            취소
+          </button>
+          <button type="submit" disabled={!code} className="px-5 py-2 rounded-full bg-indigo-600 text-white font-korean hover:bg-indigo-700 disabled:opacity-40">
+            확인
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1258,6 +1315,7 @@ function ResponseBox({
   onSave,
   note,
   onTeacherPass,
+  allowEmpty,
 }: {
   title: string;
   ask: string;
@@ -1272,6 +1330,7 @@ function ResponseBox({
   onSave: () => void;
   note?: string; // 규칙 검사를 통과하지 못했을 때 알려 주는 말
   onTeacherPass?: () => void; // 도움 4단계에서 선생님이 확인하고 넘길 때
+  allowEmpty?: boolean; // 교사 미리보기: 쓰지 않아도 저장하고 넘어갈 수 있다
 }) {
   const writing = !saved || editing;
   return (
@@ -1293,7 +1352,7 @@ function ResponseBox({
             className="w-full rounded-lg border-2 border-slate-200 bg-white focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 outline-none px-3 py-2 text-[16px] leading-relaxed resize-y disabled:bg-slate-100"
           />
           <div className="flex gap-2">
-            <ActionButton onClick={onSave} disabled={disabled || !value.trim()} icon={<Save size={18} />}>
+            <ActionButton onClick={onSave} disabled={disabled || (!allowEmpty && !value.trim())} icon={<Save size={18} />}>
               {saved ? '수정한 생각 저장하기' : '생각 저장하기'}
             </ActionButton>
             {saved && (
