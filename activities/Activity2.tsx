@@ -142,8 +142,6 @@ function loadState(key: string): A2State {
 const startPOf = (id: TaskId, st: A2State) => (isPredictTask(id) ? PREDICT[id].rounds[st.roundIdx[id]] : id === 'change' ? CHANGE_P : 5);
 
 const HINT_STEP_MS = 7000;
-// 도움 3단계에서 막대 그림의 칸 표시도 함께 켜는 탐구 (1번은 시소 그림의 거리 곡선과 숫자만 보여 준다)
-const cellsAtHelp3 = (id: TaskId) => id !== 'predictSeesaw';
 const now = () => new Date().toISOString();
 const SEESAW_CHOICES: Choice[] = ['left', 'flat', 'right', 'unsure'];
 const BAR_CHOICES: BarChoice[] = ['over', 'equal', 'under', 'unsure'];
@@ -275,7 +273,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setView('side');
     setMorphT(0);
     setP(startPOf(id, st));
-    setShowCells(st.help[id] >= 3 && cellsAtHelp3(id));
+    setShowCells(st.help[id] >= 3);
     setSelected(null);
     setTiltScale(1);
     clearHints();
@@ -294,7 +292,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setP(r);
     setView('side');
     setMorphT(0);
-    setShowCells(helpLevel >= 3 && cellsAtHelp3(id));
+    setShowCells(helpLevel >= 3);
     setSelected(null);
     clearHints();
     setTiltScale(1);
@@ -435,13 +433,10 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     noteSupport(`help${level}`);
     addLog('HELP_UP', `${task.label}. 도움 ${level} · ${SUPPORT_LEVEL_LABEL[level]} (${cause})`, { activity: 'A2', taskId: openId, hint: `help${level}` });
     if (level === 3) {
-      // 1번: 시소 그림에 받침점에서 각 추까지의 거리만 곡선과 숫자로 (막대 그림은 그대로) /
-      // 2번: 같은 거리 곡선과 숫자 + 막대 그림의 칸 /
+      setShowCells(true);
+      noteSupport('cells', openId, true);
+      // 1·2번: 막대 그림에 칸 표시 + 시소 그림에 받침점에서 각 추까지의 거리를 곡선과 숫자로 /
       // 3·4번: 막대 그림의 모자란 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교 + 거리 곡선과 숫자
-      if (cellsAtHelp3(openId)) {
-        setShowCells(true);
-        noteSupport('cells', openId, true);
-      }
       playHints(openId === 'predictSeesaw' || openId === 'predictBars' ? ['DISTANCE_CURVES'] : ['SUM_BALANCE']);
     }
     if (level === 4) {
