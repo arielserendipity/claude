@@ -162,20 +162,60 @@ export function checkReflect(task: TaskId, raw: string): CheckResult {
   return result(why);
 }
 
-// ---- 3번 ‘두 그림을 이어 보면’: 평균이 두 그림에서 각각 무슨 뜻이고 어떻게 이어지는지 ----
-// 인정: ① 평균(초록 선·받침점·균형)을 말하면서 넘친 칸·모자란 칸·거리·합·평평함 같은 연결을 말함,
-//       ② 넘친 칸과 모자란 칸이 같다/시소가 평평하다처럼 두 그림에서 똑같이 나타나는 것을 말함.
-const MEAN_WORD = /(평균|균형|받침점|초록)/;
-const CONNECT_WORD = /(넘|모자|거리|합|평평|수평|균형|같|똑같|연결|대응|이어|오른|왼|높이|칸|기준|차이)/;
+// ---- 3번 ‘두 그림을 이어 보면’: ① 막대 그림에서 평균의 뜻 ② 시소 그림에서 평균의 뜻 ③ 두 그림이 이어지는 점, 세 부분을 모두 써야 한다 ----
+// 글쓰기 도우미 버튼(문장 시작)을 눌러 쓸 수도 있고, 버튼 없이 한 번에 써도 세 부분이 다 들어 있으면 인정한다.
+export type LinkPart = 'bar' | 'beam' | 'link';
+export const LINK_PARTS: { id: LinkPart; label: string; starter: string }[] = [
+  { id: 'bar', label: '막대 그림에서 평균의 뜻', starter: '막대 그림에서 평균은 ' },
+  { id: 'beam', label: '시소 그림에서 평균의 뜻', starter: '시소 그림에서 평균은 ' },
+  { id: 'link', label: '두 그림이 이어지는 점', starter: '두 그림이 이어지는 점은 ' },
+];
+const STARTER_RE: Record<LinkPart, RegExp> = {
+  bar: /막대\s*그림에서\s*평균은/,
+  beam: /시소\s*그림에서\s*평균은/,
+  link: /두\s*그림이\s*이어지는\s*점은/,
+};
+// 버튼으로 시작한 부분에 알맞은 말이 들어 있는지
+const PART_TALK: Record<LinkPart, RegExp> = {
+  bar: /(초록|선|높이|기준|칸|넘|모자|막대|위|아래|합|수|값|자료)/,
+  beam: /(받침|시소|균형|평평|수평|거리|오른|왼|기울|저울|합)/,
+  // 연결: 연결·같음을 말하거나, 넘친 칸·모자란 칸이 오른쪽·왼쪽 거리가 된다고 말함
+  link: /(연결|이어|대응|같|똑같|그래서|때문|라서|아서|어서|서로|둘|양쪽|맞|합|바뀌|된다|돼요|해당|가리키|(넘|모자)[^.\n]{0,16}(오른|왼))/,
+};
+// 버튼 없이 쓴 글에서 각 부분이 들어 있는지 (조금 더 엄격하게: 그림 이름이나 그 그림의 말이 있어야 한다)
+const LOOSE_TALK: Record<LinkPart, RegExp> = {
+  bar: /(막대|초록\s*선|기준선|높이|넘친|모자란)/,
+  beam: /(시소|받침점|균형|거리|평평|수평)/,
+  link: PART_TALK.link,
+};
+
+// 빠진 부분 (학생에게 알려 주고, 모두 있어야 통과)
+export function linkMissing(raw: string): LinkPart[] {
+  const text = raw.replace(/^\[예상\].*$/gm, '');
+  const marks = LINK_PARTS.map((p) => {
+    const m = STARTER_RE[p.id].exec(text);
+    return m ? { id: p.id, start: m.index, end: m.index + m[0].length } : null;
+  })
+    .filter((x): x is { id: LinkPart; start: number; end: number } => !!x)
+    .sort((a, b) => a.start - b.start);
+  const body: Partial<Record<LinkPart, string>> = {};
+  marks.forEach((m, i) => {
+    body[m.id] = text.slice(m.end, marks[i + 1]?.start ?? text.length);
+  });
+  return LINK_PARTS.map((p) => p.id).filter((id) => {
+    const b = body[id];
+    if (b !== undefined) return !(b.replace(/\s+/g, '').length >= 3 && PART_TALK[id].test(b));
+    return !LOOSE_TALK[id].test(text);
+  });
+}
+
 export function checkLink(raw: string): CheckResult {
   const text = clean(raw);
   if (emptyAnswer(text)) return result(['글이 비었거나 너무 짧음/“모르겠어요”']);
   const why: string[] = [];
   const { forward, reversed } = mappingDirection(text);
   if (reversed && !forward) why.push('넘침·모자람과 오른쪽·왼쪽을 뒤집어 말함');
-  const meanLink = MEAN_WORD.test(text) && CONNECT_WORD.test(text);
-  const same = /(같|똑같|비슷|동일|마찬가지)/.test(text) && /(넘|모자|합|거리|양쪽|왼쪽|오른쪽|높이|칸)/.test(text);
-  if (!(meanLink || FLAT_WORD.test(text) || same)) why.push('평균의 뜻과 두 그림의 연결(넘친 칸·모자란 칸·거리·평평함)을 말하지 않음');
+  for (const id of linkMissing(raw)) why.push(`${LINK_PARTS.find((p) => p.id === id)!.label}을(를) 쓰지 않음`);
   return result(why);
 }
 
