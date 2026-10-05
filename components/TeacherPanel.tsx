@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bot, Check, ChevronDown, ChevronRight, Copy, FileDown, KeyRound, Send, Trash2, X } from 'lucide-react';
 import { LogEntry, TeacherNote } from '../types';
-import { PREDICT, TASKS, isPredictTask, promptFor } from '../lib/questions';
+import { AI_GUIDE, PREDICT, STUDENT_LEVEL_GUIDE, TASKS, isPredictTask, promptFor } from '../lib/questions';
 import { SUPPORT_LEVEL_LABEL, TEACHER_HELP_TEXT } from '../lib/hints';
 
 export const TEACHER_TITLES = {
@@ -208,6 +208,10 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
                     <br />
                     같은 자료는 처음부터 같은 색·이름표로 이어 보여 줍니다. 확인하기는 정오 판정 없이 가려 둔 그림을 보여 줍니다.
                   </div>
+                  <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 px-3 py-2">
+                    <div className="text-xs font-bold text-indigo-700 mb-1">AI 분석 프롬프트에 들어간 ‘초등학생 기준’</div>
+                    <pre className="text-xs text-slate-600 whitespace-pre-wrap font-sans">{STUDENT_LEVEL_GUIDE}</pre>
+                  </div>
                   {TASKS.map((t) => (
                     <div key={t.id} className="space-y-1">
                       <div className="font-bold">
@@ -221,6 +225,7 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
                       ))}
                       <div className="text-xs text-slate-500">의도: {t.goal}</div>
                       <div className="text-xs text-slate-500">살펴볼 것: {t.look}</div>
+                      <div className="text-xs text-indigo-700">AI에게 알려 준 기준(초등학생 기준): {AI_GUIDE[t.id]}</div>
                       <ol className="list-decimal pl-5 text-xs text-slate-500">
                         {t.help.map((h, k) => (
                           <li key={k}>

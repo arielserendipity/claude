@@ -65,7 +65,7 @@ export function analyzeActivity1(a: Activity1Attempt): Activity1Analysis {
 
   let note = '';
   if (a.isSuccess && a.failCount === 0 && a.explorationSec < 15) note = ' 첫 시도에 빠르게 해결함.';
-  else if (a.isSuccess && a.failCount >= 2) note = ' 거리 시각 힌트가 열린 뒤 해결함.';
+  else if (a.isSuccess && a.failCount >= 3) note = ' 거리 시각 힌트가 열린 뒤 해결함.';
   else note = misconception(a);
 
   const teacherLog = `[규칙 진단] ${a.level}단계: ${a.explorationSec}초 탐구, ${dragPattern(a.logs)}. ${result}.${note}`;
@@ -74,7 +74,7 @@ export function analyzeActivity1(a: Activity1Attempt): Activity1Analysis {
     return {
       teacherLog,
       reasoningForNextStep: '같은 단계를 다시 풀며 추와 받침점 사이 거리 관계를 살피게 함.',
-      showVisualHint: a.failCount >= 2,
+      showVisualHint: a.failCount >= 3,
       blocksToAdd: 1,
       forceInteger: true,
     };

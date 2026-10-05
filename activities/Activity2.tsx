@@ -436,7 +436,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       setShowCells(true);
       noteSupport('cells', openId, true);
       // 1번: 칸 표시만 / 2번: 받침점에서 각 추까지의 거리를 곡선과 숫자로 /
-      // 3·4번: 막대 그림의 부족한 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교 + 거리 곡선과 숫자
+      // 3·4번: 막대 그림의 모자란 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교 + 거리 곡선과 숫자
       playHints(openId === 'predictSeesaw' ? [] : openId === 'predictBars' ? ['DISTANCE_CURVES'] : ['SUM_BALANCE']);
     }
     if (level === 4) {

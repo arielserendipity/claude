@@ -70,7 +70,7 @@ export function makeLayout(region: Region, values: number[], extraSlots = 0): La
   // 막대 그림
   const padL = 48;
   const padR = 18;
-  const padT = 42;
+  const padT = 84; // 위쪽에 도움 힌트(두 줄 합 비교, 시소 그림과 같은 자리)가 들어갈 자리를 비워 둔다
   const padB = 46;
   const S0 = Math.min(84, (region.w - padL - padR) / n);
   const chartW = padL + n * S0 + padR;
