@@ -16,6 +16,7 @@ import {
   TaskId,
   barSidesAt,
   isDontKnow,
+  describeDiff,
   isPredictTask,
   meanOf,
   predictionLabel,
@@ -137,7 +138,7 @@ const fmt = (x: number) => String(parseFloat(x.toFixed(2)));
 
 const ANALYZE_SYSTEM = `당신은 초등학교 5학년 수학 '평균' 수업에서 교사를 돕는 연구 보조자입니다.
 학생은 같은 자료를 '막대 그림'과 '시소 그림' 두 표상으로 보며 탐구합니다. 두 그림에서 같은 자료는 같은 색·이름표로 처음부터 이어져 있습니다.
-탐구는 1) 막대 그림만 보고 가려 둔 시소 그림 예상하기, 2) 시소 그림만 보고 가려 둔 막대 그림 예상하기(다른 자료), 3) 나만의 자료로 같은 관계 확인하기, 4) 받침점을 5에 두고 자료를 바꾸어 평평함 지키기입니다. 학생이 틀릴 때(예상과 결과가 다름, 바꾼 자료에서 시소가 기욺, 나만의 자료에서 구할 수가 빠짐)마다 도움이 한 단계씩 올라갑니다.
+탐구는 1) 막대 그림만 보고 가려 둔 시소 그림 예상하기, 2) 시소 그림만 보고 가려 둔 막대 그림 예상하기(다른 자료), 3) 나만의 자료로 같은 관계 확인하기, 4) 받침점을 5에 두고 자료의 개수나 값을 바꾸어(더하기·지우기·값 옮기기) 평평함 지키기입니다. 학생이 틀릴 때(예상과 결과가 다름, 바꾼 자료에서 시소가 기욺, 나만의 자료에서 구할 수가 빠짐)마다 도움이 한 단계씩 올라갑니다. 도움 3단계에서는 시소 그림에 받침점부터 각 추까지의 거리가 곡선과 숫자로 나타나고, 3·4번에서는 여기에 막대 그림의 부족한 칸·넘친 칸의 합과 시소 그림의 왼쪽·오른쪽 거리의 합을 한 줄로 모아 비교하는 그림이 더해집니다.
 당신의 일은 학생 반응에서 두 표상을 연결한 증거를 찾아 교사에게 보고하는 것입니다. 정답·오답이나 통과 여부를 정하지 않습니다. 학생에게 하는 말은 쓰지 마세요.
 
 판단 항목 (각각 yes / partial / no / na 중 하나):
@@ -181,7 +182,7 @@ function buildAnalyzeInput(inp: AnalysisInput, attempt: number) {
 - 실제 초록색(초록 선 = 받침점) 위치: ${fmt(inp.p)} (평균이 아닐 수 있음)
 - 현재 기준과의 차이: ${devP} → 넘침(= 받침점 오른쪽 거리의 합) ${fmt(atP.over)}, 모자람(= 왼쪽 거리의 합) ${fmt(atP.under)}
 - 이때 시소: ${CHOICE_LABEL[tiltAt(v, inp.p)]} / 이때 막대 그림: ${BAR_CHOICE_LABEL[barSidesAt(v, inp.p)]}${hiddenNote}
-${inp.before ? `- 바꾸기 전 자료: ${inp.before.join(', ')}\n` : ''}${inp.prediction ? `- 학생의 예상: ${predictionLabel(inp.prediction)}\n` : ''}${
+${inp.before ? `- 바꾸기 전 자료: ${inp.before.join(', ')} (${inp.before.length}개, 평균 ${fmt(meanOf(inp.before))}) → 바꾼 모습: ${describeDiff(inp.before, v)}\n` : ''}${inp.prediction ? `- 학생의 예상: ${predictionLabel(inp.prediction)}\n` : ''}${
     inp.history?.length
       ? `- 세 번의 예상과 결과: ${inp.history.map((h) => `초록색 ${h.p}에서 예상 ${h.prediction ? predictionLabel(h.prediction) : '-'} → 결과 ${predictionLabel(h.actual)}`).join(' / ')}\n`
       : ''
@@ -205,8 +206,11 @@ function readInput(body: any): AnalysisInput | null {
   if (!Array.isArray(values) || values.length < 1 || values.length > 12 || !values.every((x: unknown) => typeof x === 'number' && Number.isFinite(x))) return null;
   const n = values.length;
   const p = typeof body.p === 'number' && Number.isFinite(body.p) ? body.p : meanOf(values);
+  // 바꾸기 전 자료는 개수가 바뀔 수 있다(자료를 더하거나 지운 경우)
   const before =
-    Array.isArray(body.before) && body.before.length === n && body.before.every((x: unknown) => typeof x === 'number' && Number.isFinite(x)) ? body.before : undefined;
+    Array.isArray(body.before) && body.before.length >= 1 && body.before.length <= 12 && body.before.every((x: unknown) => typeof x === 'number' && Number.isFinite(x))
+      ? body.before
+      : undefined;
   return {
     taskId: body.taskId,
     step: String(body.step ?? '').slice(0, 30),

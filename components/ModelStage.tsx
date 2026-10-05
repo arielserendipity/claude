@@ -351,6 +351,8 @@ function ModelView({
   const pIsInt = Math.abs(p - Math.round(p)) < 1e-9;
   const leveling = hk === 'LEVELING' && atBar && pIsInt;
   const sumStrips = hk === 'SUM_BALANCE' && atBalance;
+  const barCompare = hk === 'SUM_BALANCE' && atBar; // 막대 그림: 부족한 칸과 넘친 칸을 한 줄씩 모아 비교
+  const curvesOn = (hk === 'DISTANCE_CURVES' || hk === 'SUM_BALANCE') && atBalance; // 시소 그림: 거리 곡선과 숫자
   const segOn = (i: number) =>
     showCells || hk === 'SUM_BALANCE' || hk === 'LEVELING' || hk === 'CELLS_TO_DISTANCE' || focusIdx === i;
   const pulseSeg = (i: number) => focusIdx === i || hk === 'CELLS_TO_DISTANCE';
@@ -552,7 +554,7 @@ function ModelView({
         {/* 초록 선보다 넘친 칸(주황) / 모자란 칸(파랑) → 추와 받침점 사이 거리 */}
         {!leveling &&
           values.map((v, i) => {
-            if (Math.abs(v - p) < 1e-9 || !segOn(i)) return null;
+            if (Math.abs(v - p) < 1e-9 || !segOn(i) || curvesOn) return null; // 곡선과 숫자를 보여 줄 때는 칸 막대를 걷는다
             const lo = Math.min(v, p);
             const hi = Math.max(v, p);
             const excess = v > p;
@@ -596,6 +598,12 @@ function ModelView({
               </g>
             );
           })}
+
+        {/* 도움 3단계: 받침점(초록색)에서 각 추까지의 거리를 곡선과 숫자로 */}
+        {curvesOn && lateR > 0 && <DistanceCurves L={L} values={values} p={p} pivotX={pivot.x} nonce={hint?.nonce ?? 0} opacity={lateR} />}
+
+        {/* 도움 3단계: 막대 그림에서 부족한 칸과 넘친 칸을 각각 한 줄로 모아 비교 */}
+        {barCompare && <BarCompareOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
 
         {/* 막대 값 (칸 위에 보이도록 마지막에) */}
         {!leveling &&
@@ -809,6 +817,112 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
                 <line key={u} x1={L.bx + u * unit} x2={L.bx + u * unit} y1={row.y} y2={row.y + H} stroke={row.col.stroke} strokeWidth={1.5} />
               ))}
               <text x={L.bx + row.total * unit + 12} y={row.y + H - 2} fontSize={18} fill={row.col.stroke}>
+                {fmt(row.total)}
+              </text>
+            </motion.g>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+// 시소 그림: 받침점(초록색)에서 각 추까지의 거리를 곡선과 숫자로 (왼쪽 파랑, 오른쪽 주황). 가까운 추는 낮게, 먼 추는 높게 그린다.
+function DistanceCurves({ L, values, p, pivotX, nonce, opacity }: { L: Layout; values: number[]; p: number; pivotX: number; nonce: number; opacity: number }) {
+  const items = values
+    .map((v, i) => ({ v, i, d: Math.abs(v - p) }))
+    .filter((c) => c.d > 1e-9)
+    .sort((a, b) => a.d - b.d || a.i - b.i);
+  const ey = L.beamY - BEAM_HALF - 2;
+  return (
+    <motion.g key={nonce} initial={{ opacity: 0 }} animate={{ opacity }} transition={{ duration: 0.7 }} pointerEvents="none">
+      {items.map((c, order) => {
+        const wr = weightRect(L, c.i, c.v);
+        const sx = L.bx + ((wr.ua + wr.ub) / 2) * L.U1;
+        const sy = wr.y0 - 8;
+        const cxp = (sx + pivotX) / 2;
+        const cyp = Math.min(sy, ey) - 34 - order * 20;
+        // 숫자는 곡선의 38% 지점에 둔다: 이웃한 추의 숫자끼리 겹치지 않도록 추 쪽으로 치우친다
+        const tt = 0.38;
+        const midX = (1 - tt) * (1 - tt) * sx + 2 * tt * (1 - tt) * cxp + tt * tt * pivotX;
+        const midY = (1 - tt) * (1 - tt) * sy + 2 * tt * (1 - tt) * cyp + tt * tt * ey;
+        const col = c.v < p ? DEFICIT : EXCESS;
+        return (
+          <g key={`curve-${c.i}`}>
+            <path d={`M ${sx} ${sy} Q ${cxp} ${cyp} ${pivotX} ${ey}`} fill="none" stroke={col.stroke} strokeWidth={3} strokeDasharray="7 6" strokeLinecap="round" />
+            <circle cx={sx} cy={sy} r={4.5} fill={col.stroke} />
+            <circle cx={midX} cy={midY} r={13} fill="#fff" stroke={col.stroke} strokeWidth={2.5} />
+            <text x={midX} y={midY + 5} fontSize={14} textAnchor="middle" fill={col.stroke}>
+              {fmt(c.d)}
+            </text>
+          </g>
+        );
+      })}
+      <circle cx={pivotX} cy={ey} r={5} fill={MEAN.stroke} stroke="#fff" strokeWidth={2} />
+    </motion.g>
+  );
+}
+
+// 막대 그림: 부족한 칸(파랑)과 넘친 칸(주황)을 막대마다 떼어 각각 한 줄로 이어 붙이고 합을 보여 준다
+function BarCompareOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
+  const g = L.barGap;
+  const f = L.barFrac;
+  const Xb = (i: number) => L.O0.x + (i + g) * L.S0;
+  const Yb = (u: number) => L.O0.y - u * L.U0;
+  const w = f * L.S0;
+  const under = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9);
+  const over = values.map((v, i) => ({ v, i })).filter((o) => o.v > p + 1e-9);
+  const D = sum(under.map((o) => p - o.v));
+  const E = sum(over.map((o) => o.v - p));
+  const H = 11;
+  const y1 = L.region.y + 8;
+  const y2 = y1 + H + 5;
+  const avail = L.region.w - (L.O0.x - L.region.x) - 64;
+  const unit = Math.min(26, avail / Math.max(D, E, 1));
+  const rows = [
+    { items: under, y: y1, col: DEFICIT, total: D, excess: false },
+    { items: over, y: y2, col: EXCESS, total: E, excess: true },
+  ];
+  let order = 0;
+  const nPieces = under.length + over.length;
+  const doneDelay = 0.5 + nPieces * 0.3 + 0.8;
+  return (
+    <g key={nonce} pointerEvents="none">
+      {rows.map((row, ri) => {
+        let cum = 0;
+        return (
+          <g key={ri}>
+            {row.items.map((o) => {
+              const len = Math.abs(o.v - p);
+              const fx = L.O0.x + cum * unit;
+              const fw = len * unit;
+              cum += len;
+              const top = row.excess ? Yb(o.v) : Yb(p);
+              const hgt = len * L.U0;
+              const delay = 0.5 + order++ * 0.3;
+              return (
+                <motion.rect
+                  key={`${nonce}-${o.i}`}
+                  x={fx}
+                  y={row.y}
+                  width={fw}
+                  height={H}
+                  fill={row.excess ? 'url(#hatch-excess)' : DEFICIT.fill}
+                  stroke={row.col.stroke}
+                  strokeWidth={2}
+                  strokeDasharray={row.excess ? undefined : '4 3'}
+                  style={{ originX: 0, originY: 0 }}
+                  initial={{ x: Xb(o.i) - fx, y: top - row.y, scaleX: w / Math.max(fw, 0.001), scaleY: hgt / H }}
+                  animate={{ x: 0, y: 0, scaleX: 1, scaleY: 1 }}
+                  transition={{ delay, duration: 0.7, ease: 'easeInOut' }}
+                />
+              );
+            })}
+            <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: doneDelay }}>
+              {innerIntegers(0, row.total).map((u) => (
+                <line key={u} x1={L.O0.x + u * unit} x2={L.O0.x + u * unit} y1={row.y} y2={row.y + H} stroke={row.col.stroke} strokeWidth={1.5} />
+              ))}
+              <text x={L.O0.x + row.total * unit + 8} y={row.y + H} fontSize={17} fill={row.col.stroke} stroke="#fff" strokeWidth={3} paintOrder="stroke">
                 {fmt(row.total)}
               </text>
             </motion.g>

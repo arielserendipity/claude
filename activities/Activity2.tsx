@@ -43,6 +43,8 @@ import {
   predictionLabel,
   promptFor,
   customMissing,
+  describeDiff,
+  diffData,
   ruleAnalyze,
   tiltAt,
 } from '../lib/questions';
@@ -433,8 +435,9 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (level === 3) {
       setShowCells(true);
       noteSupport('cells', openId, true);
-      // 시소 그림을 가린 동안에는 막대 그림의 칸만, 나머지는 양쪽 거리의 합도 보여 준다
-      playHints(openId === 'predictSeesaw' ? [] : ['SUM_BALANCE']);
+      // 1번: 칸 표시만 / 2번: 받침점에서 각 추까지의 거리를 곡선과 숫자로 /
+      // 3·4번: 막대 그림의 부족한 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교 + 거리 곡선과 숫자
+      playHints(openId === 'predictSeesaw' ? [] : openId === 'predictBars' ? ['DISTANCE_CURVES'] : ['SUM_BALANCE']);
     }
     if (level === 4) {
       onTeacherNote({
@@ -519,17 +522,32 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
 
   // ---------- 4. 자료 바꾸기 ----------
   const methodSaved = !!st.saved['change.method'];
-  const changes = DEFAULT_VALUES.map((v, i) => ({ i, from: v, to: st.work[i] })).filter((c) => c.from !== c.to);
+  const changeEditable = openId === 'change' && methodSaved;
+  const diff = diffData(DEFAULT_VALUES, st.work); // 더한 자료·뺀 자료 (값을 옮기면 뺀 값과 더한 값으로 나타남)
+  const changed = diff.added.length + diff.removed.length > 0;
+  const canCheckChange = changed && st.work.length >= 2;
+  const changeWork = (next: number[], action: string) => {
+    patch(() => ({ work: next }));
+    setSelected(null);
+    clearHints();
+    addLog('DATA_CHANGE', `${action}: [${next.join(', ')}]`, { activity: 'A2', taskId: 'change' });
+  };
+  const addWork = (v: number) => {
+    if (st.work.length >= MAX_ITEMS) return;
+    changeWork([...st.work, v], `추가 ${v}`);
+  };
+  const removeWork = (i: number) => changeWork(st.work.filter((_, k) => k !== i), `삭제 #${i + 1}(${st.work[i]})`);
   const checkChange = () => {
+    if (!canCheckChange) return;
     const tilt = tiltAt(st.work, CHANGE_P);
     patch((s) => ({ checks: [...s.checks, { before: [...DEFAULT_VALUES], after: [...s.work], tilt, at: now() }] }));
-    addLog('CHECK_CHANGE', `[${DEFAULT_VALUES.join(', ')}] → [${st.work.join(', ')}] · 바꾼 자료 ${changes.length}개 · 시소 ${CHOICE_LABEL[tilt]}`, {
+    addLog('CHECK_CHANGE', `[${DEFAULT_VALUES.join(', ')}] → [${st.work.join(', ')}] · ${describeDiff(DEFAULT_VALUES, st.work)} · 시소 ${CHOICE_LABEL[tilt]}`, {
       activity: 'A2',
       taskId: 'change',
       context: JSON.stringify({
         before: DEFAULT_VALUES,
         after: st.work,
-        changed: changes,
+        changed: diff,
         p: CHANGE_P,
         tilt,
         supportsBefore: supportsRef.current.filter((e) => e.task === 'change'),
@@ -807,8 +825,16 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
           </div>
         )}
 
-        {/* 그림 이름 */}
+        {/* 그림 이름 (+ 도움 힌트가 켜져 있을 때 끄는 단추: 그림 위의 숫자를 가리지 않도록 이 줄에 둔다) */}
         <div className="relative h-7 mt-2 font-korean text-slate-500">
+          {activeHint && (
+            <div className="absolute -top-1 right-3 z-10 flex items-center gap-1 bg-amber-100 border-2 border-amber-300 rounded-full pl-2 pr-0.5 py-0.5 shadow">
+              <HandHelping size={18} className="text-amber-600" />
+              <button onClick={clearHints} aria-label="힌트 닫기" className="w-6 h-6 rounded-full hover:bg-amber-200 flex items-center justify-center text-amber-700">
+                <X size={14} />
+              </button>
+            </div>
+          )}
           {view === 'side' ? (
             <>
               <span className="absolute left-[25%] -translate-x-1/2 flex items-center gap-1.5">
@@ -843,12 +869,12 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
             showCells={showCells}
             selected={selected}
             onSelect={setSelected}
-            editable={(openId === 'change' && methodSaved) || customMode}
-            allowAddRemove={customMode}
+            editable={changeEditable || customMode}
+            allowAddRemove={changeEditable || customMode}
             onValueChange={editValue}
             onValueDragEnd={(i, from, to) => addLog('EDIT_VALUE', `#${i + 1}: ${from} -> ${to}`, { activity: 'A2', taskId: openId })}
-            onAddValue={customMode ? addValue : undefined}
-            onRemoveValue={customMode ? removeValue : undefined}
+            onAddValue={customMode ? addValue : changeEditable ? addWork : undefined}
+            onRemoveValue={customMode ? removeValue : changeEditable ? removeWork : undefined}
             hint={activeHint}
             hideBalance={hidden && pset?.hide === 'balance'}
             hideBars={hidden && pset?.hide === 'bars'}
@@ -856,14 +882,6 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
             tiltScale={openId === 'predictSeesaw' ? tiltScale : 1}
           />
 
-          {activeHint && (
-            <div className="absolute top-2 right-3 flex items-center gap-1 bg-amber-100 border-2 border-amber-300 rounded-full pl-2 pr-1 py-1 shadow">
-              <HandHelping size={20} className="text-amber-600" />
-              <button onClick={clearHints} aria-label="닫기" className="w-7 h-7 rounded-full hover:bg-amber-200 flex items-center justify-center text-amber-700">
-                <X size={16} />
-              </button>
-            </div>
-          )}
         </div>
 
         {view === 'morph' && (
@@ -931,13 +949,16 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                       {box(t, 'method', 'change.method')}
                       {methodSaved && (
                         <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 font-korean text-[15px] text-slate-700 flex flex-col gap-2">
-                          <span>막대 끝이나 추를 끌어 자료를 바꿔 보세요. 받침점은 5에 그대로예요.</span>
-                          <span className="text-sm text-slate-500">
-                            바꾼 자료 {changes.length}개{changes.length ? `: ${changes.map((c) => `${c.from}→${c.to}`).join(', ')}` : ''} · 지금 시소:{' '}
-                            {CHOICE_LABEL[tiltAt(st.work, CHANGE_P)]}
+                          <span>
+                            막대 끝이나 추를 끌어 값을 바꾸고, ‘+’ 자리를 눌러 자료를 더하고, ×로 지워 보세요. 받침점은 5에 그대로예요.
                           </span>
+                          <span className="text-sm text-slate-500">
+                            자료 {st.work.length}개 · 바꾼 모습: {describeDiff(DEFAULT_VALUES, st.work)} · 지금 시소:{' '}
+                            {st.work.length ? CHOICE_LABEL[tiltAt(st.work, CHANGE_P)] : '-'}
+                          </span>
+                          {st.work.length < 2 && <span className="text-sm text-rose-600">자료가 2개 이상 있어야 확인할 수 있어요.</span>}
                           <div className="flex gap-2 flex-wrap">
-                            <ActionButton onClick={checkChange} disabled={changes.length === 0} icon={<Eye size={18} />}>
+                            <ActionButton onClick={checkChange} disabled={!canCheckChange} icon={<Eye size={18} />}>
                               확인하기
                             </ActionButton>
                             <button
