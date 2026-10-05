@@ -142,6 +142,23 @@ function loadState(key: string): A2State {
 const startPOf = (id: TaskId, st: A2State) => (isPredictTask(id) ? PREDICT[id].rounds[st.roundIdx[id]] : id === 'change' ? CHANGE_P : 5);
 
 const HINT_STEP_MS = 7000;
+
+// 도움 단계별 시각 힌트. 1단계는 글만 나오고 2단계부터 그림이 바뀐다.
+//  cells: 막대 그림에 칸(넘친 칸·모자란 칸) 표시가 켜지는 단계
+//  curves: 시소 그림에 받침점에서 각 추까지의 거리가 곡선과 숫자로 나오는 단계 (이때 시소 그림의 칸 막대는 걷는다)
+//  sums: 막대 그림의 모자란 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교하는 단계
+const HELP_VISUALS: Record<TaskId, { cells: number; curves: number; sums?: number }> = {
+  predictSeesaw: { cells: 3, curves: 2 }, // 1번: 2단계 거리만, 3단계 거리 + 칸
+  predictBars: { cells: 2, curves: 3 }, // 2번: 2단계 칸만, 3단계 칸 + 거리
+  custom: { cells: 2, curves: 2, sums: 3 }, // 3번: 2단계 칸 + 거리, 3단계 한 줄로 모은 합 추가
+  change: { cells: 2, curves: 2, sums: 3 }, // 4번: 3번과 같음
+};
+const cellsAtHelp = (id: TaskId, level: number) => level >= HELP_VISUALS[id].cells;
+const hintsAtHelp = (id: TaskId, level: number): HintKey[] => {
+  const v = HELP_VISUALS[id];
+  if (v.sums && level >= v.sums) return ['SUM_BALANCE'];
+  return level >= v.curves ? ['DISTANCE_CURVES'] : [];
+};
 const now = () => new Date().toISOString();
 const SEESAW_CHOICES: Choice[] = ['left', 'flat', 'right', 'unsure'];
 const BAR_CHOICES: BarChoice[] = ['over', 'equal', 'under', 'unsure'];
@@ -184,6 +201,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
 
   const task = TASK_BY_ID[openId];
   const helpLevel = st.help[openId];
+  const helpCells = cellsAtHelp(openId, helpLevel); // 도움으로 켜진 칸 표시 (막대 그림에만)
   const isUnlocked = (idx: number) => teacherMode || idx === 0 || st.done[TASKS[idx - 1].id];
 
   // ---------- 지원 이력 ----------
@@ -238,7 +256,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     tiltRaf.current = requestAnimationFrame(step);
   };
 
-  // ---------- 시각 힌트 재생 (도움 3단계에서만, 학생이 고른 위치는 그대로) ----------
+  // ---------- 시각 힌트 재생 (도움 2·3단계에서만, 학생이 고른 위치는 그대로) ----------
   const hintNonce = useRef(1);
   const playHints = (keys: HintKey[]) => {
     if (!keys.length) return;
@@ -273,7 +291,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setView('side');
     setMorphT(0);
     setP(startPOf(id, st));
-    setShowCells(st.help[id] >= 3);
+    setShowCells(false);
     setSelected(null);
     setTiltScale(1);
     clearHints();
@@ -292,7 +310,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setP(r);
     setView('side');
     setMorphT(0);
-    setShowCells(helpLevel >= 3);
+    setShowCells(false);
     setSelected(null);
     clearHints();
     setTiltScale(1);
@@ -376,7 +394,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       hidden: hidden ? (pset?.hide === 'bars' ? '막대 그림 가림' : '시소 그림 가림') : '없음',
       seesawNow: hidden && pset?.hide === 'balance' ? '가려짐' : CHOICE_LABEL[tiltAt(vals, pNow)],
       view,
-      cellsOn: showCells,
+      cellsOn: showCells || helpCells,
       helpLevel,
       round: inp.round,
       prediction: inp.prediction,
@@ -432,12 +450,10 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     patch((s) => ({ help: { ...s.help, [openId]: level } }));
     noteSupport(`help${level}`);
     addLog('HELP_UP', `${task.label}. 도움 ${level} · ${SUPPORT_LEVEL_LABEL[level]} (${cause})`, { activity: 'A2', taskId: openId, hint: `help${level}` });
-    if (level === 3) {
-      setShowCells(true);
-      noteSupport('cells', openId, true);
-      // 1·2번: 막대 그림에 칸 표시 + 시소 그림에 받침점에서 각 추까지의 거리를 곡선과 숫자로 /
-      // 3·4번: 막대 그림의 모자란 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교 + 거리 곡선과 숫자
-      playHints(openId === 'predictSeesaw' || openId === 'predictBars' ? ['DISTANCE_CURVES'] : ['SUM_BALANCE']);
+    if (level === 2 || level === 3) {
+      // 2단계부터 그림이 바뀐다 (HELP_VISUALS): 칸 표시(막대 그림)는 도움 단계로 켜지고, 거리 곡선·한 줄 합은 힌트로 한 번 재생한다
+      if (cellsAtHelp(openId, level)) noteSupport('cells', openId, true);
+      playHints(hintsAtHelp(openId, level));
     }
     if (level === 4) {
       onTeacherNote({
@@ -498,11 +514,6 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setView('side');
     setP(round);
     if (openId === 'predictSeesaw') animateTilt();
-    else {
-      // 막대 그림을 칸과 함께 보여 준다: 예상한 대상(넘친 부분·모자란 부분)을 바로 비교할 수 있게
-      setShowCells(true);
-      noteSupport('cells', openId, true);
-    }
     const actual = outcomeAt(openId, PREDICT[openId].values, round);
     addLog('REVEAL', `초록색 ${round}: 예상 ${rs.prediction ? predictionLabel(rs.prediction) : '-'} / 실제 ${predictionLabel(actual)}`, {
       activity: 'A2',
@@ -867,6 +878,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
             view={view}
             morphT={morphT}
             showCells={showCells}
+            barCells={helpCells}
             selected={selected}
             onSelect={setSelected}
             editable={changeEditable || customMode}
