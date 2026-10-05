@@ -54,7 +54,7 @@ interface ModelStageProps {
   onPDragEnd?: (from: number, to: number) => void;
   view: ViewMode;
   morphT: number;
-  showCells: boolean; // 칸 단추: 막대 그림과 시소 그림 모두에 칸을 보여 준다
+  showCells: boolean; // 힌트 단추: 막대 그림에는 칸을, 시소 그림에는 거리 곡선과 숫자를 보여 준다
   barCells?: boolean; // 도움으로 켠 칸 표시: 막대 그림에만 칸을 보여 준다 (시소 그림에는 거리 곡선·숫자로 보여 준다)
   selected: number | null;
   onSelect: (i: number | null) => void;
@@ -359,7 +359,8 @@ function ModelView({
   const leveling = hk === 'LEVELING' && atBar && pIsInt;
   const sumStrips = hk === 'SUM_BALANCE' && atBalance;
   const barCompare = hk === 'SUM_BALANCE' && atBar; // 막대 그림: 모자란 칸과 넘친 칸을 한 줄씩 모아 비교
-  const curvesOn = (hk === 'DISTANCE_CURVES' || hk === 'SUM_BALANCE') && atBalance; // 시소 그림: 거리 곡선과 숫자
+  // 시소 그림: 거리 곡선과 숫자. '힌트' 단추를 켜도 시소 그림에는 칸 막대 대신 이 거리 곡선만 나온다 (막대 그림에는 칸이 나온다)
+  const curvesOn = (hk === 'DISTANCE_CURVES' || hk === 'SUM_BALANCE' || showCells) && atBalance;
   const segOn = (i: number) =>
     showCells || (barCells && !atBalance) || hk === 'SUM_BALANCE' || hk === 'LEVELING' || hk === 'CELLS_TO_DISTANCE' || focusIdx === i;
   const pulseSeg = (i: number) => focusIdx === i || hk === 'CELLS_TO_DISTANCE';

@@ -162,15 +162,20 @@ export function checkReflect(task: TaskId, raw: string): CheckResult {
   return result(why);
 }
 
-// ---- 3번 ‘두 그림을 이어 보면’: 자료가 바뀌어도 똑같이 나타나는 것 ----
+// ---- 3번 ‘두 그림을 이어 보면’: 평균이 두 그림에서 각각 무슨 뜻이고 어떻게 이어지는지 ----
+// 인정: ① 평균(초록 선·받침점·균형)을 말하면서 넘친 칸·모자란 칸·거리·합·평평함 같은 연결을 말함,
+//       ② 넘친 칸과 모자란 칸이 같다/시소가 평평하다처럼 두 그림에서 똑같이 나타나는 것을 말함.
+const MEAN_WORD = /(평균|균형|받침점|초록)/;
+const CONNECT_WORD = /(넘|모자|거리|합|평평|수평|균형|같|똑같|연결|대응|이어|오른|왼|높이|칸|기준|차이)/;
 export function checkLink(raw: string): CheckResult {
   const text = clean(raw);
   if (emptyAnswer(text)) return result(['글이 비었거나 너무 짧음/“모르겠어요”']);
   const why: string[] = [];
   const { forward, reversed } = mappingDirection(text);
   if (reversed && !forward) why.push('넘침·모자람과 오른쪽·왼쪽을 뒤집어 말함');
+  const meanLink = MEAN_WORD.test(text) && CONNECT_WORD.test(text);
   const same = /(같|똑같|비슷|동일|마찬가지)/.test(text) && /(넘|모자|합|거리|양쪽|왼쪽|오른쪽|높이|칸)/.test(text);
-  if (!(FLAT_WORD.test(text) || same)) why.push('자료가 바뀌어도 같은 것(평평함, 넘친 칸과 모자란 칸이 같음)을 말하지 않음');
+  if (!(meanLink || FLAT_WORD.test(text) || same)) why.push('평균의 뜻과 두 그림의 연결(넘친 칸·모자란 칸·거리·평평함)을 말하지 않음');
   return result(why);
 }
 
