@@ -54,7 +54,8 @@ interface ModelStageProps {
   onPDragEnd?: (from: number, to: number) => void;
   view: ViewMode;
   morphT: number;
-  showCells: boolean;
+  showCells: boolean; // 칸 단추: 막대 그림과 시소 그림 모두에 칸을 보여 준다
+  barCells?: boolean; // 도움으로 켠 칸 표시: 막대 그림에만 칸을 보여 준다 (시소 그림에는 거리 곡선·숫자로 보여 준다)
   selected: number | null;
   onSelect: (i: number | null) => void;
   editable: boolean;
@@ -89,6 +90,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   view,
   morphT,
   showCells,
+  barCells = false,
   selected,
   onSelect,
   editable,
@@ -208,6 +210,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     p,
     mean,
     showCells,
+    barCells,
     selected: pairCues ? selected : null,
     hint,
     pairCues,
@@ -290,6 +293,7 @@ interface ModelViewProps {
   p: number;
   mean: number;
   showCells: boolean;
+  barCells: boolean;
   selected: number | null;
   hint: ActiveHint | null;
   pairCues: boolean;
@@ -312,6 +316,7 @@ function ModelView({
   p,
   mean,
   showCells,
+  barCells,
   selected,
   hint,
   pairCues,
@@ -344,6 +349,8 @@ function ModelView({
   const early = 1 - clamp01(r1 * 1.6);
 
   const hk = hint?.key;
+  // 거리 곡선·한 줄 합 힌트는 자료를 바꾸는 중에도 떠 있을 수 있다 (바꾸면 힌트가 사라진다). 다른 힌트(애니메이션)가 재생되는 동안만 편집을 막는다.
+  const editLock = hk != null && hk !== 'DISTANCE_CURVES' && hk !== 'SUM_BALANCE';
   const targetIdx = hint?.target != null ? values.indexOf(hint.target) : -1;
   const focusIdx = (hk === 'EXCESS_TO_DISTANCE' || hk === 'DEFICIT_TO_GAP') && targetIdx >= 0 ? targetIdx : null;
   const dimRef = focusIdx ?? selected;
@@ -354,7 +361,7 @@ function ModelView({
   const barCompare = hk === 'SUM_BALANCE' && atBar; // 막대 그림: 모자란 칸과 넘친 칸을 한 줄씩 모아 비교
   const curvesOn = (hk === 'DISTANCE_CURVES' || hk === 'SUM_BALANCE') && atBalance; // 시소 그림: 거리 곡선과 숫자
   const segOn = (i: number) =>
-    showCells || hk === 'SUM_BALANCE' || hk === 'LEVELING' || hk === 'CELLS_TO_DISTANCE' || focusIdx === i;
+    showCells || (barCells && !atBalance) || hk === 'SUM_BALANCE' || hk === 'LEVELING' || hk === 'CELLS_TO_DISTANCE' || focusIdx === i;
   const pulseSeg = (i: number) => focusIdx === i || hk === 'CELLS_TO_DISTANCE';
 
   // 자료값 축 (막대 그림의 세로축 → 저울대)
@@ -424,7 +431,7 @@ function ModelView({
         {values.map((v, i) => {
           const top = leveling ? Math.min(v, p) : v;
           const pts = localRect(L, t, 0, top, i + g, i + g + f, weightRect(L, i, v));
-          const canDrag = editable && atBar && !hk;
+          const canDrag = editable && atBar && !editLock;
           const labelV = localLabel(L, t, v, i + g + f / 2, { x: 0, y: -10 }, { x: 16, y: 5 });
           const labelI = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 24 }, { x: -20, y: 5 });
           return (
@@ -490,14 +497,14 @@ function ModelView({
         {canAdd && atBar && (
           <AddBarSlot L={L} slot={n} empty={n === 0} onPointerDown={(e) => addBarAt(e, L)} />
         )}
-        {editable && allowAddRemove && atBar && !hk &&
+        {editable && allowAddRemove && atBar && !editLock &&
           values.map((_, i) => {
             const pos = localLabel(L, t, 0, i + g + f / 2, { x: 0, y: 46 }, { x: -20, y: 5 });
             return <DeleteButton key={`del-bar-${i}`} x={pos.x} y={pos.y} onClick={() => removeItem(i)} />;
           })}
 
         {/* 새 자료: 저울대 위 점선 추를 누르면 그 자리에 추가 놓인다 */}
-        {canAdd && atBalance && !hk && <GhostWeights L={L} values={values} onAdd={addWeight} />}
+        {canAdd && atBalance && !editLock && <GhostWeights L={L} values={values} onAdd={addWeight} />}
 
         {/* 추 */}
         {lateR > 0 &&
@@ -509,7 +516,7 @@ function ModelView({
             const h = wr.y1 - wr.y0;
             const cx = (x0 + x1) / 2;
             const inset = w * 0.12;
-            const canDrag = editable && atBalance && !hk;
+            const canDrag = editable && atBalance && !editLock;
             const d = `M ${x0 + inset} ${wr.y0 + 1} L ${x1 - inset} ${wr.y0 + 1} L ${x1} ${wr.y1 - 3} Q ${x1} ${wr.y1} ${x1 - 3} ${wr.y1} L ${x0 + 3} ${wr.y1} Q ${x0} ${wr.y1} ${x0} ${wr.y1 - 3} Z`;
             return (
               <g
@@ -540,7 +547,7 @@ function ModelView({
             );
           })}
 
-        {editable && allowAddRemove && atBalance && !hk && selected != null && selected < values.length && (() => {
+        {editable && allowAddRemove && atBalance && !editLock && selected != null && selected < values.length && (() => {
           const wr = weightRect(L, selected, values[selected]);
           return (
             <DeleteButton
