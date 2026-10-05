@@ -39,7 +39,8 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
     addLog(action, details, { activity: 'A1', level, failCount: levelFailCount, ...extra });
 
   // 교사 미리보기에서는 힌트를 처음부터 모두 볼 수 있다
-  const hintLevel: 0 | 1 | 2 = teacherMode || levelFailCount >= 3 ? 2 : levelFailCount >= 2 ? 1 : 0;
+  // 3번 틀리면 거리 곡선, 5번 틀리면 왼쪽·오른쪽 거리의 합 막대까지
+  const hintLevel: 0 | 1 | 2 = teacherMode || levelFailCount >= 5 ? 2 : levelFailCount >= 3 ? 1 : 0;
 
   const average = useMemo(() => {
     if (blocks.length === 0) return 0;
@@ -113,13 +114,13 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
           teacherLog: analysis.teacherLog,
           reasoning: analysis.reasoningForNextStep,
         });
-        // 2회 이상 틀리면 시각 힌트(거리 곡선), 3회 이상이면 거리의 합 막대까지 켠다
+        // 3회 이상 틀리면 시각 힌트(거리 곡선), 5회 이상이면 거리의 합 막대까지 켠다
         if (analysis.showVisualHint) {
           setIsHintActive(true);
-          onSupportSeen?.(calculatedFailCount >= 3 ? '거리 곡선+거리의 합' : '거리 곡선');
-          log('VISUAL_HINT_ON', `hint level ${calculatedFailCount >= 3 ? 2 : 1}`, {
+          onSupportSeen?.(calculatedFailCount >= 5 ? '거리 곡선+거리의 합' : '거리 곡선');
+          log('VISUAL_HINT_ON', `hint level ${calculatedFailCount >= 5 ? 2 : 1}`, {
             failCount: calculatedFailCount,
-            hint: calculatedFailCount >= 3 ? '거리 곡선 + 왼쪽/오른쪽 거리의 합' : '거리 곡선',
+            hint: calculatedFailCount >= 5 ? '거리 곡선 + 왼쪽/오른쪽 거리의 합' : '거리 곡선',
           });
         }
       } else {

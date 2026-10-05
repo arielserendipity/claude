@@ -351,7 +351,7 @@ function ModelView({
   const pIsInt = Math.abs(p - Math.round(p)) < 1e-9;
   const leveling = hk === 'LEVELING' && atBar && pIsInt;
   const sumStrips = hk === 'SUM_BALANCE' && atBalance;
-  const barCompare = hk === 'SUM_BALANCE' && atBar; // 막대 그림: 부족한 칸과 넘친 칸을 한 줄씩 모아 비교
+  const barCompare = hk === 'SUM_BALANCE' && atBar; // 막대 그림: 모자란 칸과 넘친 칸을 한 줄씩 모아 비교
   const curvesOn = (hk === 'DISTANCE_CURVES' || hk === 'SUM_BALANCE') && atBalance; // 시소 그림: 거리 곡선과 숫자
   const segOn = (i: number) =>
     showCells || hk === 'SUM_BALANCE' || hk === 'LEVELING' || hk === 'CELLS_TO_DISTANCE' || focusIdx === i;
@@ -602,9 +602,6 @@ function ModelView({
         {/* 도움 3단계: 받침점(초록색)에서 각 추까지의 거리를 곡선과 숫자로 */}
         {curvesOn && lateR > 0 && <DistanceCurves L={L} values={values} p={p} pivotX={pivot.x} nonce={hint?.nonce ?? 0} opacity={lateR} />}
 
-        {/* 도움 3단계: 막대 그림에서 부족한 칸과 넘친 칸을 각각 한 줄로 모아 비교 */}
-        {barCompare && <BarCompareOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
-
         {/* 막대 값 (칸 위에 보이도록 마지막에) */}
         {!leveling &&
           early > 0 &&
@@ -633,6 +630,8 @@ function ModelView({
       </g>
 
       {sumStrips && <SumStripsOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
+      {/* 막대 그림: 모자란 칸과 넘친 칸을 시소 그림과 똑같은 모양의 두 줄로 모아 비교 */}
+      {barCompare && <BarCompareOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
 
       {/* 초록 선 (막대 그림의 기준선) */}
       {r2 < 1 && (
@@ -759,22 +758,25 @@ function LevelingOverlay({ L, values, p, nonce, fillOf }: { L: Layout; values: n
   );
 }
 
-// 왼쪽 거리들(파랑)과 오른쪽 거리들(주황)을 각각 한 줄로 이어 붙여 길이를 견주기 (시소 그림)
-function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
-  const leftItems = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9);
-  const rightItems = values.map((v, i) => ({ v, i })).filter((o) => o.v > p + 1e-9);
-  const D = sum(leftItems.map((o) => p - o.v));
-  const E = sum(rightItems.map((o) => o.v - p));
-  const k = Math.min(1, MAX_U / Math.max(D, E, 1));
-  const unit = L.U1 * k;
+// 두 줄(파랑·주황)을 각각 한 줄로 이어 붙여 길이와 합을 견주는 그림. 시소 그림과 막대 그림이 똑같은 크기·모양·위치·움직임으로 쓴다.
+// - 파랑 줄 = 왼쪽 거리들 = 모자란 칸들, 주황 줄 = 오른쪽 거리들 = 넘친 칸들 (왼쪽 줄은 ◀, 오른쪽 줄은 ▶ 표시)
+// - 한 칸의 길이는 두 그림이 같다(시소 눈금 한 칸). 같은 자료면 두 그림의 줄이 길이도 합도 똑같다.
+interface StripPiece {
+  i: number;
+  len: number; // 이 조각의 칸 수
+  from: { x: number; y: number; w: number; h: number }; // 줄로 날아오기 전의 자리(시소 그림의 거리 칸 / 막대 그림의 막대 조각)
+}
+function SumRows({ L, nonce, left, right }: { L: Layout; nonce: number; left: StripPiece[]; right: StripPiece[] }) {
+  const D = sum(left.map((o) => o.len));
+  const E = sum(right.map((o) => o.len));
+  const unit = L.U1 * Math.min(1, MAX_U / Math.max(D, E, 1));
   const H = 16;
   const rows = [
-    { items: leftItems, y: L.stripY, col: DEFICIT, total: D, dir: -1 },
-    { items: rightItems, y: L.stripY + H + 10, col: EXCESS, total: E, dir: 1 },
+    { items: left, y: L.stripY, col: DEFICIT, total: D, dir: -1 },
+    { items: right, y: L.stripY + H + 10, col: EXCESS, total: E, dir: 1 },
   ];
   let order = 0;
-  const nPieces = leftItems.length + rightItems.length;
-  const doneDelay = 0.5 + nPieces * 0.3 + 0.8;
+  const doneDelay = 0.5 + (left.length + right.length) * 0.3 + 0.8;
   return (
     <g key={nonce} pointerEvents="none">
       {rows.map((row, ri) => {
@@ -786,18 +788,13 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
               fill={row.col.stroke}
             />
             {row.items.map((o) => {
-              const lo = Math.min(o.v, p);
-              const len = Math.abs(o.v - p);
-              const seg = segmentRow(L, o.i);
               const fx = L.bx + cum * unit;
-              const fw = len * unit;
-              cum += len;
-              const sx = L.bx + lo * L.U1;
-              const sw = len * L.U1;
+              const fw = o.len * unit;
+              cum += o.len;
               const delay = 0.5 + order++ * 0.3;
               return (
                 <motion.rect
-                  key={`${nonce}-${o.i}`}
+                  key={`${nonce}-${row.dir}-${o.i}`}
                   x={fx}
                   y={row.y}
                   width={fw}
@@ -806,7 +803,7 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
                   stroke={row.col.stroke}
                   strokeWidth={2}
                   style={{ originX: 0, originY: 0 }}
-                  initial={{ x: sx - fx, y: seg.y0 - row.y, scaleX: sw / Math.max(fw, 0.001), scaleY: L.segThick / H }}
+                  initial={{ x: o.from.x - fx, y: o.from.y - row.y, scaleX: o.from.w / Math.max(fw, 0.001), scaleY: o.from.h / H }}
                   animate={{ x: 0, y: 0, scaleX: 1, scaleY: 1 }}
                   transition={{ delay, duration: 0.7, ease: 'easeInOut' }}
                 />
@@ -825,6 +822,18 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
       })}
     </g>
   );
+}
+
+// 시소 그림: 왼쪽 거리들(파랑)과 오른쪽 거리들(주황)을 각각 한 줄로 모은다. 조각은 추와 받침점 사이의 거리 칸에서 날아온다.
+function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
+  const piece = (v: number, i: number): StripPiece => {
+    const lo = Math.min(v, p);
+    const len = Math.abs(v - p);
+    return { i, len, from: { x: L.bx + lo * L.U1, y: segmentRow(L, i).y0, w: len * L.U1, h: L.segThick } };
+  };
+  const left = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9).map((o) => piece(o.v, o.i));
+  const right = values.map((v, i) => ({ v, i })).filter((o) => o.v > p + 1e-9).map((o) => piece(o.v, o.i));
+  return <SumRows L={L} nonce={nonce} left={left} right={right} />;
 }
 
 // 시소 그림: 받침점(초록색)에서 각 추까지의 거리를 곡선과 숫자로 (왼쪽 파랑, 오른쪽 주황). 가까운 추는 낮게, 먼 추는 높게 그린다.
@@ -863,74 +872,18 @@ function DistanceCurves({ L, values, p, pivotX, nonce, opacity }: { L: Layout; v
   );
 }
 
-// 막대 그림: 부족한 칸(파랑)과 넘친 칸(주황)을 막대마다 떼어 각각 한 줄로 이어 붙이고 합을 보여 준다
+// 막대 그림: 모자란 칸들(파랑)과 넘친 칸들(주황)을 막대마다 떼어 각각 한 줄로 모은다. 시소 그림의 거리 줄과 크기·모양·위치가 같다.
 function BarCompareOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
   const g = L.barGap;
   const f = L.barFrac;
-  const Xb = (i: number) => L.O0.x + (i + g) * L.S0;
-  const Yb = (u: number) => L.O0.y - u * L.U0;
-  const w = f * L.S0;
-  const under = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9);
-  const over = values.map((v, i) => ({ v, i })).filter((o) => o.v > p + 1e-9);
-  const D = sum(under.map((o) => p - o.v));
-  const E = sum(over.map((o) => o.v - p));
-  const H = 11;
-  const y1 = L.region.y + 8;
-  const y2 = y1 + H + 5;
-  const avail = L.region.w - (L.O0.x - L.region.x) - 64;
-  const unit = Math.min(26, avail / Math.max(D, E, 1));
-  const rows = [
-    { items: under, y: y1, col: DEFICIT, total: D, excess: false },
-    { items: over, y: y2, col: EXCESS, total: E, excess: true },
-  ];
-  let order = 0;
-  const nPieces = under.length + over.length;
-  const doneDelay = 0.5 + nPieces * 0.3 + 0.8;
-  return (
-    <g key={nonce} pointerEvents="none">
-      {rows.map((row, ri) => {
-        let cum = 0;
-        return (
-          <g key={ri}>
-            {row.items.map((o) => {
-              const len = Math.abs(o.v - p);
-              const fx = L.O0.x + cum * unit;
-              const fw = len * unit;
-              cum += len;
-              const top = row.excess ? Yb(o.v) : Yb(p);
-              const hgt = len * L.U0;
-              const delay = 0.5 + order++ * 0.3;
-              return (
-                <motion.rect
-                  key={`${nonce}-${o.i}`}
-                  x={fx}
-                  y={row.y}
-                  width={fw}
-                  height={H}
-                  fill={row.excess ? 'url(#hatch-excess)' : DEFICIT.fill}
-                  stroke={row.col.stroke}
-                  strokeWidth={2}
-                  strokeDasharray={row.excess ? undefined : '4 3'}
-                  style={{ originX: 0, originY: 0 }}
-                  initial={{ x: Xb(o.i) - fx, y: top - row.y, scaleX: w / Math.max(fw, 0.001), scaleY: hgt / H }}
-                  animate={{ x: 0, y: 0, scaleX: 1, scaleY: 1 }}
-                  transition={{ delay, duration: 0.7, ease: 'easeInOut' }}
-                />
-              );
-            })}
-            <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: doneDelay }}>
-              {innerIntegers(0, row.total).map((u) => (
-                <line key={u} x1={L.O0.x + u * unit} x2={L.O0.x + u * unit} y1={row.y} y2={row.y + H} stroke={row.col.stroke} strokeWidth={1.5} />
-              ))}
-              <text x={L.O0.x + row.total * unit + 8} y={row.y + H} fontSize={17} fill={row.col.stroke} stroke="#fff" strokeWidth={3} paintOrder="stroke">
-                {fmt(row.total)}
-              </text>
-            </motion.g>
-          </g>
-        );
-      })}
-    </g>
-  );
+  const piece = (v: number, i: number): StripPiece => {
+    const len = Math.abs(v - p);
+    const top = L.O0.y - Math.max(v, p) * L.U0; // 막대 위(넘친 칸) 또는 초록 선(모자란 칸)에서 시작하는 조각의 윗면
+    return { i, len, from: { x: L.O0.x + (i + g) * L.S0, y: top, w: f * L.S0, h: len * L.U0 } };
+  };
+  const left = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9).map((o) => piece(o.v, o.i));
+  const right = values.map((v, i) => ({ v, i })).filter((o) => o.v > p + 1e-9).map((o) => piece(o.v, o.i));
+  return <SumRows L={L} nonce={nonce} left={left} right={right} />;
 }
 
 // 예상하기: 한 그림을 가려 둔다 (평평하게 고정된 시소나 빈 막대를 보여 주면 그 모습으로 오해할 수 있어 아예 덮는다)
