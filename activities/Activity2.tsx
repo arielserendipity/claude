@@ -5,6 +5,7 @@ import {
   ChartColumn,
   CircleCheck,
   Eye,
+  Hand,
   HandHelping,
   Lock,
   Pencil,
@@ -51,6 +52,8 @@ import {
 import { HintKey, MAX_SUPPORT_LEVEL, SUPPORT_LEVEL_LABEL, SupportLevel, TEACHER_HELP_TEXT, supportLabel } from '../lib/hints';
 import { AddLog, SolvedProblem, TeacherNote } from '../types';
 import { loadSession, saveSession } from '../lib/storage';
+import { CheckResult, checkLink, checkMethod, checkReflect, judgePrediction } from '../lib/answerCheck';
+import { isTeacherName } from '../lib/teacher';
 import { DEFICIT, EXCESS, MEAN } from '../lib/palette';
 import { fmt } from '../lib/geometry';
 
@@ -59,7 +62,9 @@ import { fmt } from '../lib/geometry';
 // - 학생에게는 판정(별·통과)을 보여 주지 않는다. 예상 저장하기 · 확인하기 · 생각 저장하기 · 생각 수정하기 · 다음 탐구만 있다.
 // - 도움은 학생이 틀릴 때마다 한 단계씩 올라간다(예상과 결과가 다를 때, 바꾼 자료에서 시소가 기울 때, 나만의 자료에서 구할 수가 빠졌을 때).
 // - 확인하기는 정오 대신 가려 둔 그림 자체를 보여 준다(시소가 기울거나, 막대 그림이 칸과 함께 나타남).
-// - 다음 탐구는 '해야 할 일을 마쳤는지'로 열리고, AI 분석 결과와는 관계없다. 분석은 교사 기록에만 남는다.
+// - 답이 틀리면 넘어가지 못한다: 1·2번은 고른 예상과 까닭이 모두 맞아야 다음 초록색으로 가고(틀리면 같은 자리에서 다시 예상),
+//   정리하는 글·3번 칸·4번 방법은 규칙 검사(lib/answerCheck)를 통과해야 한다. 막히면 도움 4단계에서 선생님이 풀어 줄 수 있다.
+// - AI 분석은 학생의 진행과 관계없이 교사 기록에만 남는다.
 // - 같은 자료는 처음부터 같은 색·이름표로 잇는다. 학생은 기준과의 차이(넘침·모자람 ↔ 오른쪽·왼쪽 거리)와 그 관계를 생각한다.
 // - 변환 애니메이션은 먼저 생각을 남긴 뒤(또는 도움 3단계) 쓸 수 있고, 가려 둔 그림이 있을 때는 쓸 수 없다.
 // - 응답마다 그때의 화면 조건(자료값, 실제 초록색 위치, 예상·공개 시점, 응답 전에 본 도움)을 함께 기록한다.
@@ -78,6 +83,8 @@ interface RoundState {
   predictionAt?: string;
   revealed: boolean;
   revealedAt?: string;
+  passed?: boolean; // 확인한 결과 예상과 까닭이 모두 맞았는지 (맞아야 다음으로 간다)
+  attempts?: number; // 이 초록색에서 예상한 횟수
 }
 
 interface SupportEvent {
@@ -100,6 +107,7 @@ interface A2State {
   custom: number[]; // 나만의 자료
   dataMode: DataMode;
   supports: SupportEvent[];
+  ok: Record<string, boolean>; // 글 칸·단계를 규칙 검사로 통과했는지 (또는 선생님이 확인했는지)
 }
 
 const TASK_IDS = TASKS.map((t) => t.id);
@@ -107,6 +115,19 @@ const PREDICT_IDS = Object.keys(PREDICT) as PredictTaskId[];
 const CUSTOM_STEPS = ['bar', 'beam', 'link'];
 const emptyRecord = <T,>(v: T) => Object.fromEntries(TASK_IDS.map((id) => [id, v])) as Record<TaskId, T>;
 const roundKey = (task: PredictTaskId, p: number) => `${task}.${p}`;
+// 예전 기록(passed가 없는 것)은 공개했으면 지나간 것으로 본다
+const roundPassed = (x?: RoundState) => !!x && (x.passed ?? x.revealed);
+
+// 규칙 검사에서 통과하지 못했을 때 학생에게 보이는 말 (정답을 알려 주지 않고 무엇을 써야 하는지만 말함)
+const STEP_NOTE: Record<string, string> = {
+  'predictSeesaw.reflect': '넘친 칸과 모자란 칸을 견주어, 시소가 어떻게 되는지와 이어서 써 보세요.',
+  'predictBars.reflect': '시소가 기운 쪽이나 거리를 보고 막대 그림이 어떻게 될지 이어서 써 보세요.',
+  'change.method': '자료를 더하거나 빼거나 옮기면 시소가 어떻게 될지, 어떻게 바꿀지 써 보세요.',
+  'change.reflect': '시소를 평평하게 지키려고 자료를 어떻게 바꾸었는지 써 보세요.',
+  'custom.bar': '내 자료의 평균과 넘친 칸의 합, 모자란 칸의 합을 구해서 써 보세요.',
+  'custom.beam': '평균에서 시소가 어떻게 되는지와 오른쪽·왼쪽 거리의 합을 써 보세요.',
+  'custom.link': '자료가 바뀌어도 똑같이 나타나는 것(예: 시소가 평평해요)을 써 보세요.',
+};
 
 const initialState = (): A2State => ({
   drafts: {},
@@ -122,6 +143,7 @@ const initialState = (): A2State => ({
   custom: [],
   dataMode: 'default',
   supports: [],
+  ok: {},
 });
 
 function loadState(key: string): A2State {
@@ -135,6 +157,7 @@ function loadState(key: string): A2State {
     help: { ...base.help, ...s.help },
     rounds: { ...base.rounds, ...s.rounds },
     roundIdx: { ...base.roundIdx, ...s.roundIdx },
+    ok: { ...base.ok, ...s.ok },
   };
 }
 
@@ -172,6 +195,18 @@ interface Activity2Props {
   solvedProblems: SolvedProblem[]; // 활동 1에서 푼 문제 (나만의 자료로 불러오기)
 }
 
+// 글 칸을 저장할 때 규칙으로 맞는지 본다 (검사하지 않는 칸은 null)
+function checkStep(task: TaskId, step: string, text: string, values: number[]): CheckResult | null {
+  if (task === 'custom' && (step === 'bar' || step === 'beam')) {
+    const missing = customMissing(step, values, text);
+    return { ok: missing.length === 0, why: missing.map((m) => `${m} 빠짐`) };
+  }
+  if (task === 'custom' && step === 'link') return checkLink(text);
+  if (step === 'reflect') return checkReflect(task, text);
+  if (task === 'change' && step === 'method') return checkMethod(text);
+  return null;
+}
+
 export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Supports, solvedProblems }: Activity2Props) {
   const storeKey = `avg_a2_${playerName}`;
   const [st, setSt] = useState<A2State>(() => loadState(storeKey));
@@ -196,6 +231,14 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const [showCells, setShowCells] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [tiltScale, setTiltScale] = useState(1);
+  // 4번: 자료를 바꾼 뒤 '확인하기'를 누르기 전에는 시소가 기울지 않는다 (먼저 예상하고, 확인하면 기운다)
+  const [changeChecked, setChangeChecked] = useState(false);
+  // 네 탐구를 모두 마치면 마무리 화면으로 바뀐다 ('내 활동 다시 보기'로 돌아갈 수 있음)
+  const allDone = TASKS.every((t) => st.done[t.id]);
+  const [showFinish, setShowFinish] = useState(allDone);
+  useEffect(() => {
+    if (allDone) setShowFinish(true);
+  }, [allDone]);
   const [hintQueue, setHintQueue] = useState<ActiveHint[]>([]);
   const activeHint = hintQueue[0] ?? null;
 
@@ -203,6 +246,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const helpLevel = st.help[openId];
   const helpCells = cellsAtHelp(openId, helpLevel); // 도움으로 켜진 칸 표시 (막대 그림에만)
   const isUnlocked = (idx: number) => teacherMode || idx === 0 || st.done[TASKS[idx - 1].id];
+  // 글 칸을 저장했고 규칙 검사를 통과했는지 (예전 기록처럼 검사 결과가 없으면 통과로 본다)
+  const stepOk = (key: string) => !!st.saved[key] && (st.ok[key] ?? true);
 
   // ---------- 지원 이력 ----------
   const supportsRef = useRef(st.supports);
@@ -323,7 +368,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     return true; // 나만의 자료: 1~3번을 마친 뒤의 정리 탐구라 처음부터 쓸 수 있다
   };
   // 변환 애니메이션('바꿔 보기')은 먼저 생각을 남긴 뒤에 (또는 도움 3단계), 가려 둔 그림이 없을 때만
-  const morphAllowed = !hidden && (teacherMode || hasFirstThought(openId) || helpLevel >= 3);
+  // 3·4번에서만 쓴다
+  const morphAllowed = !hidden && (openId === 'custom' || openId === 'change') && (teacherMode || hasFirstThought(openId) || helpLevel >= 3);
 
   // ---------- 기록 + 분석 (분석은 교사용, 학생은 기다리지 않음) ----------
   const analyze = (inp: AnalysisInput, attempt: number, title: string) => {
@@ -430,10 +476,17 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setEditing((e) => ({ ...e, [key]: false }));
     const stepTitle = t.steps.find((x) => x.id === stepId)?.title ?? stepId;
     record({ task: t.id, step: stepId, stepTitle, kind, text, attempt, extra, meta });
-    // 3. 나만의 자료: 구해야 할 수가 빠졌으면 틀린 것으로 보고 도움을 한 단계 올린다
-    if (t.id === 'custom') {
-      const missing = customMissing(stepId, extra?.values ?? values, text);
-      if (missing.length) raiseHelp(`${stepTitle}: ${missing.join(', ')} 빠짐`);
+    // 규칙 검사: 틀리면 도움이 한 단계 오르고, 맞을 때까지 이 칸은 '다 했다'로 치지 않는다
+    const res = checkStep(t.id, stepId, text, extra?.values ?? values);
+    if (res) {
+      patch((s) => ({ ok: { ...s.ok, [key]: res.ok } }));
+      addLog('JUDGE', `${t.label}. ${stepTitle}: ${res.ok ? '맞음' : `틀림 (${res.why.join(' / ')})`}`, {
+        activity: 'A2',
+        taskId: t.id,
+        teacherLog: res.why.join(' / '),
+      });
+      // 4번 '바꾸기 전 예상'은 아직 바꾼 자료가 없어서 도움을 올리지 않고 써야 할 것만 알려 준다
+      if (!res.ok && key !== 'change.method') raiseHelp(`${stepTitle}: ${res.why.join(', ')}`);
     }
   };
 
@@ -441,6 +494,10 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (st.done[id]) return;
     patch((s) => ({ done: { ...s.done, [id]: true } }));
     addLog('TASK_DONE', `${TASK_BY_ID[id].label}. ${TASK_BY_ID[id].title}`, { activity: 'A2', taskId: id });
+    if (TASKS.every((x) => x.id === id || st.done[x.id])) {
+      addLog('ALL_DONE', '활동 2의 네 탐구를 모두 마침', { activity: 'A2' });
+      onTeacherNote({ activity: 'A2', title: '활동 2 · 네 탐구를 모두 마침', body: '학생이 네 탐구를 모두 맞게 마쳤습니다. 마무리 화면에서 선생님께 손을 들어 알리도록 안내했습니다.' });
+    }
   };
 
   // ---------- 도움: 틀릴 때마다 한 단계씩 (교사 미리보기에서는 단추로도 올려 볼 수 있음) ----------
@@ -494,22 +551,29 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     const text = (st.drafts[key] ?? '').trim();
     if (!text) return; // 까닭은 꼭 쓴다
     const at = now();
+    const prev = st.saved[key]; // 다시 예상하는 경우 이전 까닭이 남아 있다
+    const attempt = prev ? prev.revisions + 2 : 1;
     setRound(openId, round, { predictionSaved: true, predictionAt: at });
-    patch((s) => ({ saved: { ...s.saved, [key]: { first: text, latest: text, firstAt: at, revisions: 0 } } }));
+    patch((s) => ({
+      saved: { ...s.saved, [key]: prev ? { ...prev, latest: text, revisions: prev.revisions + 1 } : { first: text, latest: text, firstAt: at, revisions: 0 } },
+    }));
     record({
       task: openId,
       step: 'predict',
       stepTitle: '예상',
-      kind: 'first',
+      kind: prev ? 'revised' : 'first',
       text,
-      attempt: 1,
+      attempt,
       extra: { values: PREDICT[openId].values, p: round, round, prediction: rs.prediction, revealed: false },
-      meta: { predictionAt: at },
+      meta: { predictionAt: at, tries: rs.attempts ?? 1 },
     });
   };
   const reveal = () => {
     if (!isPredictTask(openId) || round == null || !rs) return;
-    setRound(openId, round, { revealed: true, revealedAt: now() });
+    // 고른 예상과 까닭이 모두 맞아야 지나간다
+    const reasonText = st.saved[`${openId}.reason.${round}`]?.latest ?? '';
+    const j = judgePrediction(openId, round, rs.prediction, reasonText);
+    setRound(openId, round, { revealed: true, revealedAt: now(), passed: j.ok });
     noteSupport('reveal');
     setView('side');
     setP(round);
@@ -519,26 +583,68 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       activity: 'A2',
       taskId: openId,
     });
-    // 예상이 결과와 다르면('아직 모르겠어요' 포함) 도움을 한 단계 올린다
-    if (rs.prediction !== actual) {
-      raiseHelp(`초록색 ${round}: 예상 ${rs.prediction ? predictionLabel(rs.prediction) : '-'}, 결과 ${predictionLabel(actual)}`);
+    addLog('JUDGE', `초록색 ${round}: ${j.ok ? '예상과 까닭이 맞음' : `틀림 (${j.why.join(' / ')})`}`, {
+      activity: 'A2',
+      taskId: openId,
+      teacherLog: j.why.join(' / '),
+    });
+    // 예상이 결과와 다르거나('아직 모르겠어요' 포함) 까닭이 맞지 않으면 도움을 한 단계 올린다
+    if (!j.ok) {
+      raiseHelp(`초록색 ${round}: 예상 ${rs.prediction ? predictionLabel(rs.prediction) : '-'}, 결과 ${predictionLabel(actual)} · ${j.why.join(', ')}`);
     }
+  };
+  // 틀렸을 때: 같은 초록색에서 가려 둔 그림을 다시 가리고 처음부터 다시 예상한다 (이전 까닭은 기록에 남는다)
+  const retryRound = () => {
+    if (!isPredictTask(openId) || round == null) return;
+    const key = `${openId}.reason.${round}`;
+    const tries = (rs?.attempts ?? 1) + 1;
+    patch((s) => ({
+      rounds: { ...s.rounds, [roundKey(openId, round)]: { predictionSaved: false, revealed: false, passed: false, attempts: tries } },
+      drafts: { ...s.drafts, [key]: '' },
+    }));
+    stopMorph();
+    setView('side');
+    setMorphT(0);
+    setSelected(null);
+    clearHints();
+    setTiltScale(1);
+    setP(round);
+    addLog('RETRY_ROUND', `초록색 ${round}: 다시 예상하기 (${tries}번째)`, { activity: 'A2', taskId: openId });
+  };
+  // 도움 4단계까지 막힌 학생을 선생님이 확인하고 넘겨 줄 때 (교사 코드)
+  const askTeacher = (onPass: () => void) => {
+    const code = window.prompt('선생님 코드를 입력하세요');
+    if (code == null) return;
+    if (isTeacherName(code)) onPass();
+    else window.alert('코드가 맞지 않아요.');
+  };
+  const teacherPassStep = (key: string) => {
+    patch((s) => ({ ok: { ...s.ok, [key]: true } }));
+    addLog('TEACHER_PASS', key, { activity: 'A2', taskId: openId });
+  };
+  const teacherPassRound = () => {
+    if (!isPredictTask(openId) || round == null) return;
+    setRound(openId, round, { passed: true });
+    addLog('TEACHER_PASS', `${openId} 초록색 ${round}`, { activity: 'A2', taskId: openId });
   };
   const historyOf = (id: PredictTaskId) =>
     PREDICT[id].rounds.map((r) => {
       const x = st.rounds[roundKey(id, r)];
       return { p: r, prediction: x?.prediction, actual: outcomeAt(id, PREDICT[id].values, r) };
     });
-  const allRevealed = (id: PredictTaskId) => PREDICT[id].rounds.every((r) => st.rounds[roundKey(id, r)]?.revealed);
+  const allPassed = (id: PredictTaskId) => PREDICT[id].rounds.every((r) => roundPassed(st.rounds[roundKey(id, r)]));
 
   // ---------- 4. 자료 바꾸기 ----------
-  const methodSaved = !!st.saved['change.method'];
-  const changeEditable = openId === 'change' && methodSaved;
+  const methodOk = stepOk('change.method');
+  const changeEditable = openId === 'change' && methodOk;
+  // 시소가 평평하게 된 적이 있어야 정리하는 글로 넘어간다
+  const hasFlat = st.checks.some((c) => c.tilt === 'flat') || !!st.ok['change.flat'];
   const diff = diffData(DEFAULT_VALUES, st.work); // 더한 자료·뺀 자료 (값을 옮기면 뺀 값과 더한 값으로 나타남)
   const changed = diff.added.length + diff.removed.length > 0;
   const canCheckChange = changed && st.work.length >= 2;
   const changeWork = (next: number[], action: string) => {
     patch(() => ({ work: next }));
+    setChangeChecked(false);
     setSelected(null);
     clearHints();
     addLog('DATA_CHANGE', `${action}: [${next.join(', ')}]`, { activity: 'A2', taskId: 'change' });
@@ -552,6 +658,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (!canCheckChange) return;
     const tilt = tiltAt(st.work, CHANGE_P);
     patch((s) => ({ checks: [...s.checks, { before: [...DEFAULT_VALUES], after: [...s.work], tilt, at: now() }] }));
+    setChangeChecked(true);
+    animateTilt();
     addLog('CHECK_CHANGE', `[${DEFAULT_VALUES.join(', ')}] → [${st.work.join(', ')}] · ${describeDiff(DEFAULT_VALUES, st.work)} · 시소 ${CHOICE_LABEL[tilt]}`, {
       activity: 'A2',
       taskId: 'change',
@@ -597,20 +705,23 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
 
   // 막대 끝이나 추를 끌어 자료값 바꾸기 (3번: 나만의 자료, 4번: 복사본)
   const editValue = (i: number, v: number) => {
-    if (openId === 'change') patch((s) => ({ work: s.work.map((x, k) => (k === i ? v : x)) }));
+    if (openId === 'change') {
+      patch((s) => ({ work: s.work.map((x, k) => (k === i ? v : x)) }));
+      setChangeChecked(false);
+    }
     else if (customMode) patch((s) => ({ custom: s.custom.map((x, k) => (k === i ? v : x)) }));
     clearHints();
   };
 
-  // ---------- 완료 판정 (정답 여부가 아니라 할 일을 마쳤는지) ----------
+  // ---------- 완료 판정 (맞게 마쳐야 다음 탐구가 열린다) ----------
   useEffect(() => {
     PREDICT_IDS.forEach((id) => {
-      if (allRevealed(id) && st.saved[`${id}.reflect`]) markDone(id);
+      if (allPassed(id) && stepOk(`${id}.reflect`)) markDone(id);
     });
-    if (methodSaved && st.checks.length > 0 && st.saved['change.reflect']) markDone('change');
-    if (CUSTOM_STEPS.every((k) => st.saved[`custom.${k}`])) markDone('custom');
+    if (methodOk && hasFlat && stepOk('change.reflect')) markDone('change');
+    if (CUSTOM_STEPS.every((k) => stepOk(`custom.${k}`))) markDone('custom');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [st.saved, st.rounds, st.checks.length]);
+  }, [st.saved, st.rounds, st.checks.length, st.ok]);
 
   const setDraft = (key: string, text: string) => patch((s) => ({ drafts: { ...s.drafts, [key]: text } }));
 
@@ -644,6 +755,12 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         }}
         onCancel={() => setEditing((e) => ({ ...e, [key]: false }))}
         onSave={() => saveText(t, stepId, key, opts.extra, opts.meta)}
+        note={
+          st.saved[key] && !stepOk(key)
+            ? `아직 다음으로 넘어갈 수 없어요. ${STEP_NOTE[key] ?? ''} ‘생각 수정하기’로 고쳐 써 보세요.`
+            : undefined
+        }
+        onTeacherPass={st.saved[key] && !stepOk(key) && helpLevel >= 4 ? () => askTeacher(() => teacherPassStep(key)) : undefined}
       />
     );
   };
@@ -721,12 +838,28 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
             <span className="block text-sm text-slate-500 mt-0.5">초록색을 옮겨 보며 두 그림을 더 살펴봐도 좋아요.</span>
           </div>
         )}
-        {rs.revealed && !last && (
+        {rs.revealed && !roundPassed(rs) && (
+          <div className="rounded-xl bg-amber-50 border-2 border-amber-300 px-3 py-2 font-korean text-[15px] text-amber-900 flex flex-col gap-2">
+            <span>
+              {rs.prediction !== actual
+                ? '예상이 결과와 달랐어요. 도움을 보고 같은 자리에서 다시 예상해 봐요.'
+                : '예상은 맞았지만 까닭이 자료와 맞지 않거나 부족해요. 도움을 보고 까닭을 다시 써 봐요.'}{' '}
+              다시 맞혀야 다음으로 넘어갈 수 있어요.
+            </span>
+            <div className="flex gap-2 flex-wrap items-center">
+              <ActionButton onClick={retryRound} icon={<RotateCcw size={18} />}>
+                다시 예상하기
+              </ActionButton>
+              {helpLevel >= 4 && <TeacherPassButton onPass={() => askTeacher(teacherPassRound)} />}
+            </div>
+          </div>
+        )}
+        {rs.revealed && roundPassed(rs) && !last && (
           <ActionButton onClick={() => goRound(roundIdx + 1)} icon={<ArrowRight size={18} />}>
             초록색 {set.rounds[roundIdx + 1]}에서 예상하기
           </ActionButton>
         )}
-        {allRevealed(id) &&
+        {allPassed(id) &&
           box(t, 'reflect', `${id}.reflect`, {
             extra: { values: set.values, p, revealed: true, history: historyOf(id) },
             meta: { rounds: set.rounds.map((r) => ({ p: r, ...st.rounds[roundKey(id, r)] })) },
@@ -734,6 +867,27 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       </>
     );
   };
+
+  // ---------- 마무리 화면 ----------
+  if (showFinish) {
+    return (
+      <div className="flex-1 min-h-0 w-full flex items-center justify-center p-6">
+        <div className="bg-white rounded-[2rem] shadow-xl border border-slate-200 px-8 py-12 md:px-16 md:py-16 max-w-2xl w-full flex flex-col items-center gap-6 text-center">
+          <span className="w-28 h-28 rounded-full bg-emerald-100 flex items-center justify-center pop">
+            <Hand size={64} className="text-emerald-600" />
+          </span>
+          <h2 className="font-korean text-4xl md:text-5xl text-slate-800">수고했어요</h2>
+          <p className="font-korean text-2xl md:text-3xl leading-snug text-slate-700">선생님께 손을 들어 다했다고 말하세요.</p>
+          <button
+            onClick={() => setShowFinish(false)}
+            className="mt-4 px-5 py-2.5 rounded-full border-2 border-slate-200 bg-white font-korean text-slate-500 hover:bg-slate-50"
+          >
+            내 활동 다시 보기
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ---------- 화면 ----------
   return (
@@ -749,7 +903,9 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
               className={`${segBtn(view === 'morph')} disabled:opacity-40`}
               onClick={() => changeView('morph')}
               disabled={!morphAllowed}
-              title={morphAllowed ? '' : hidden ? '가려 둔 그림을 확인한 뒤에 쓸 수 있어요' : '먼저 생각을 저장하면 쓸 수 있어요'}
+              title={
+                morphAllowed ? '' : openId === 'custom' || openId === 'change' ? (hidden ? '가려 둔 그림을 확인한 뒤에 쓸 수 있어요' : '먼저 생각을 저장하면 쓸 수 있어요') : '3·4번에서 쓸 수 있어요'
+              }
             >
               {morphAllowed ? <Repeat size={16} /> : <Lock size={14} />} 바꿔 보기
             </button>
@@ -780,8 +936,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
             <div className="ml-auto flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded-2xl p-1 font-korean text-sm">
               <span className="px-2 text-emerald-700">초록색</span>
               {pset.rounds.map((r, k) => {
-                const doneR = !!st.rounds[roundKey(openId, r)]?.revealed;
-                const can = teacherMode || k === 0 || !!st.rounds[roundKey(openId, pset.rounds[k - 1])]?.revealed;
+                const doneR = roundPassed(st.rounds[roundKey(openId, r)]);
+                const can = teacherMode || k === 0 || roundPassed(st.rounds[roundKey(openId, pset.rounds[k - 1])]);
                 return (
                   <button
                     key={r}
@@ -891,7 +1047,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
             hideBalance={hidden && pset?.hide === 'balance'}
             hideBars={hidden && pset?.hide === 'bars'}
             lockP={hidden || openId === 'change'}
-            tiltScale={openId === 'predictSeesaw' ? tiltScale : 1}
+            tiltScale={openId === 'predictSeesaw' ? tiltScale : openId === 'change' ? (changeChecked ? tiltScale : 0) : 1}
           />
 
         </div>
@@ -959,15 +1115,18 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                   {t.id === 'change' && (
                     <>
                       {box(t, 'method', 'change.method')}
-                      {methodSaved && (
+                      {methodOk && (
                         <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 font-korean text-[15px] text-slate-700 flex flex-col gap-2">
                           <span>
                             막대 끝이나 추를 끌어 값을 바꾸고, ‘+’ 자리를 눌러 자료를 더하고, ×로 지워 보세요. 받침점은 5에 그대로예요.
                           </span>
                           <span className="text-sm text-slate-500">
-                            자료 {st.work.length}개 · 바꾼 모습: {describeDiff(DEFAULT_VALUES, st.work)} · 지금 시소:{' '}
-                            {st.work.length ? CHOICE_LABEL[tiltAt(st.work, CHANGE_P)] : '-'}
+                            자료 {st.work.length}개 · 바꾼 모습: {describeDiff(DEFAULT_VALUES, st.work)}
+                            {changeChecked && st.work.length ? ` · 지금 시소: ${CHOICE_LABEL[tiltAt(st.work, CHANGE_P)]}` : ''}
                           </span>
+                          {!changeChecked && changed && (
+                            <span className="text-sm text-indigo-700">시소가 어떻게 될지 먼저 생각해 보고, ‘확인하기’를 눌러 보세요.</span>
+                          )}
                           {st.work.length < 2 && <span className="text-sm text-rose-600">자료가 2개 이상 있어야 확인할 수 있어요.</span>}
                           <div className="flex gap-2 flex-wrap">
                             <ActionButton onClick={checkChange} disabled={!canCheckChange} icon={<Eye size={18} />}>
@@ -976,6 +1135,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                             <button
                               onClick={() => {
                                 patch(() => ({ work: [...DEFAULT_VALUES] }));
+                                setChangeChecked(false);
+                                clearHints();
                                 addLog('RESET_DATA', '처음 자료로', { activity: 'A2', taskId: 'change' });
                               }}
                               className="flex items-center gap-1.5 px-4 py-2.5 rounded-full border-2 border-slate-200 bg-white font-korean text-slate-600 hover:bg-slate-50"
@@ -983,6 +1144,14 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                               <Undo2 size={16} /> 처음 자료로
                             </button>
                           </div>
+                          {st.checks.length > 0 && !hasFlat && (
+                            <span className="text-sm text-amber-800">
+                              아직 시소가 평평해진 적이 없어요. 평평하게 되는 방법을 찾을 때까지 자료를 바꿔 확인해 봐요. 평평해져야 다음으로 넘어갈 수 있어요.
+                            </span>
+                          )}
+                          {st.checks.length > 0 && !hasFlat && helpLevel >= 4 && (
+                            <TeacherPassButton onPass={() => askTeacher(() => teacherPassStep('change.flat'))} />
+                          )}
                           {st.checks.length > 0 && (
                             <ul className="text-sm text-slate-600 list-disc pl-5">
                               {st.checks.map((c, k) => (
@@ -994,8 +1163,8 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                           )}
                         </div>
                       )}
-                      {methodSaved &&
-                        st.checks.length > 0 &&
+                      {methodOk &&
+                        hasFlat &&
                         box(t, 'reflect', 'change.reflect', {
                           extra: { values: st.work, before: [...DEFAULT_VALUES], p: CHANGE_P },
                           meta: { checks: st.checks },
@@ -1087,6 +1256,8 @@ function ResponseBox({
   onEdit,
   onCancel,
   onSave,
+  note,
+  onTeacherPass,
 }: {
   title: string;
   ask: string;
@@ -1099,13 +1270,15 @@ function ResponseBox({
   onEdit: () => void;
   onCancel: () => void;
   onSave: () => void;
+  note?: string; // 규칙 검사를 통과하지 못했을 때 알려 주는 말
+  onTeacherPass?: () => void; // 도움 4단계에서 선생님이 확인하고 넘길 때
 }) {
   const writing = !saved || editing;
   return (
-    <div className={`rounded-xl border-2 px-3 pt-2 pb-2.5 flex flex-col gap-1.5 ${saved && !editing ? 'border-emerald-200 bg-emerald-50/40' : 'border-slate-200 bg-slate-50/60'}`}>
+    <div className={`rounded-xl border-2 px-3 pt-2 pb-2.5 flex flex-col gap-1.5 ${saved && !editing ? (note ? 'border-amber-200 bg-amber-50/40' : 'border-emerald-200 bg-emerald-50/40') : 'border-slate-200 bg-slate-50/60'}`}>
       <div className="flex items-center gap-1.5 font-korean text-sm text-slate-500">
         <span className="flex-1">{title}</span>
-        {saved && !editing && <CircleCheck size={18} className="text-emerald-500" />}
+        {saved && !editing && !note && <CircleCheck size={18} className="text-emerald-500" />}
       </div>
       <p className="font-korean text-[15px] leading-snug text-slate-800">{ask}</p>
       {writing ? (
@@ -1133,12 +1306,26 @@ function ResponseBox({
       ) : (
         <>
           <div className="rounded-lg bg-white border border-slate-200 px-3 py-2 text-[16px] text-slate-800 whitespace-pre-wrap">{saved!.latest}</div>
+          {note && <div className="rounded-lg bg-amber-50 border border-amber-300 px-3 py-2 font-korean text-[15px] text-amber-900">{note}</div>}
+          {onTeacherPass && <TeacherPassButton onPass={onTeacherPass} />}
           <button onClick={onEdit} className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-full text-indigo-700 font-korean hover:bg-indigo-50">
             <Pencil size={15} /> 생각 수정하기
           </button>
         </>
       )}
     </div>
+  );
+}
+
+// 도움 4단계까지 막힌 학생을 선생님이 확인하고 넘길 때 (교사 코드를 입력)
+function TeacherPassButton({ onPass }: { onPass: () => void }) {
+  return (
+    <button
+      onClick={onPass}
+      className="self-start flex items-center gap-1.5 px-4 py-2 rounded-full border-2 border-dashed border-slate-300 bg-white text-slate-600 font-korean text-sm hover:bg-slate-50"
+    >
+      <Lock size={14} /> 선생님 확인으로 넘어가기
+    </button>
   );
 }
 
