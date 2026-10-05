@@ -52,7 +52,7 @@ import {
 import { HintKey, MAX_SUPPORT_LEVEL, SUPPORT_LEVEL_LABEL, SupportLevel, TEACHER_HELP_TEXT, supportLabel } from '../lib/hints';
 import { AddLog, SolvedProblem, TeacherNote } from '../types';
 import { loadSession, saveSession } from '../lib/storage';
-import { CheckResult, checkLink, checkMethod, checkReflect, judgePrediction } from '../lib/answerCheck';
+import { CheckResult, LINK_PARTS, checkLink, checkMethod, checkReflect, judgePrediction, linkMissing } from '../lib/answerCheck';
 import { isTeacherName } from '../lib/teacher';
 import { DEFICIT, EXCESS, MEAN } from '../lib/palette';
 import { fmt } from '../lib/geometry';
@@ -126,7 +126,7 @@ const STEP_NOTE: Record<string, string> = {
   'change.reflect': '시소를 평평하게 지키려고 자료를 어떻게 바꾸었는지 써 보세요.',
   'custom.bar': '내 자료의 평균과 넘친 칸의 합, 모자란 칸의 합을 구해서 써 보세요.',
   'custom.beam': '평균에서 시소가 어떻게 되는지와 오른쪽·왼쪽 거리의 합을 써 보세요.',
-  'custom.link': '평균이 막대 그림과 시소 그림에서 각각 어떤 뜻인지, 두 그림이 어떻게 이어지는지 써 보세요.',
+  'custom.link': '막대 그림에서 평균의 뜻, 시소 그림에서 평균의 뜻, 두 그림이 이어지는 점을 모두 써 보세요.',
 };
 
 const initialState = (): A2State => ({
@@ -744,6 +744,15 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       active ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-700'
     }`;
 
+  // 통과하지 못한 칸에 보이는 말: 3번 '두 그림을 이어 보면'은 빠진 부분을 알려 준다
+  const stepNote = (key: string) => {
+    if (key === 'custom.link') {
+      const miss = linkMissing(st.saved[key]?.latest ?? '');
+      if (miss.length) return `빠진 부분: ${miss.map((id) => LINK_PARTS.find((p) => p.id === id)!.label).join(', ')}.`;
+    }
+    return STEP_NOTE[key] ?? '';
+  };
+
   const box = (
     t: TaskDef,
     stepId: string,
@@ -772,9 +781,12 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         onSave={() => saveText(t, stepId, key, opts.extra, opts.meta)}
         note={
           st.saved[key] && !stepOk(key)
-            ? `아직 다음으로 넘어갈 수 없어요. ${STEP_NOTE[key] ?? ''} ‘생각 수정하기’로 고쳐 써 보세요.`
+            ? `아직 다음으로 넘어갈 수 없어요. ${stepNote(key)} ‘생각 수정하기’로 고쳐 써 보세요.`
             : undefined
         }
+        starters={key === 'custom.link' ? LINK_PARTS.map((p) => ({ id: p.id, label: p.starter.trim(), text: p.starter })) : undefined}
+        startersDone={key === 'custom.link' ? LINK_PARTS.filter((p) => !linkMissing(st.drafts[key] ?? '').includes(p.id)).map((p) => p.id) : undefined}
+        rows={key === 'custom.link' ? 5 : 2}
         onTeacherPass={st.saved[key] && !stepOk(key) && helpLevel >= 4 ? () => askTeacher(() => teacherPassStep(key)) : undefined}
       />
     );
@@ -1316,6 +1328,9 @@ function ResponseBox({
   note,
   onTeacherPass,
   allowEmpty,
+  starters,
+  startersDone,
+  rows = 2,
 }: {
   title: string;
   ask: string;
@@ -1331,8 +1346,26 @@ function ResponseBox({
   note?: string; // 규칙 검사를 통과하지 못했을 때 알려 주는 말
   onTeacherPass?: () => void; // 도움 4단계에서 선생님이 확인하고 넘길 때
   allowEmpty?: boolean; // 교사 미리보기: 쓰지 않아도 저장하고 넘어갈 수 있다
+  starters?: { id: string; label: string; text: string }[]; // 글쓰기 도우미 버튼: 누르면 문장 시작이 글 칸에 들어간다
+  startersDone?: string[]; // 이미 쓴 부분 (✓ 표시)
+  rows?: number;
 }) {
   const writing = !saved || editing;
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const insertStarter = (text: string) => {
+    if (value.includes(text.trim())) {
+      taRef.current?.focus(); // 이미 들어 있으면 그 칸으로 돌아가기만 한다
+      return;
+    }
+    const next = value.trim() ? value.replace(/\s*$/, '') + '\n' + text : text;
+    onChange(next);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(next.length, next.length);
+    });
+  };
   return (
     <div className={`rounded-xl border-2 px-3 pt-2 pb-2.5 flex flex-col gap-1.5 ${saved && !editing ? (note ? 'border-amber-200 bg-amber-50/40' : 'border-emerald-200 bg-emerald-50/40') : 'border-slate-200 bg-slate-50/60'}`}>
       <div className="flex items-center gap-1.5 font-korean text-sm text-slate-500">
@@ -1342,10 +1375,34 @@ function ResponseBox({
       <p className="font-korean text-[15px] leading-snug text-slate-800">{ask}</p>
       {writing ? (
         <>
+          {starters && (
+            <div className="flex flex-col gap-1.5">
+              <span className="font-korean text-sm text-slate-500">버튼을 눌러 문장을 시작해 보세요. 세 부분을 모두 써야 해요.</span>
+              <div className="flex flex-wrap gap-1.5">
+                {starters.map((st) => {
+                  const done = startersDone?.includes(st.id);
+                  return (
+                    <button
+                      type="button"
+                      key={st.id}
+                      disabled={disabled}
+                      onClick={() => insertStarter(st.text)}
+                      className={`px-3 py-1.5 rounded-full border-2 text-sm font-korean flex items-center gap-1 disabled:opacity-40 ${
+                        done ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50'
+                      }`}
+                    >
+                      {done ? <CircleCheck size={14} /> : <Pencil size={14} />} {st.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <textarea
+            ref={taRef}
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            rows={2}
+            rows={rows}
             maxLength={600}
             disabled={disabled}
             placeholder={disabled ? disabledHint ?? '' : '✏️'}
