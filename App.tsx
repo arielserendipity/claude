@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { House, Scale, Settings, UserRound } from 'lucide-react';
 import { Activity1 } from './activities/Activity1';
-import { Activity2 } from './activities/Activity2';
+import { Activity2Shell } from './activities/Activity2Shell';
 import { Home } from './components/Home';
 import { TeacherPanel } from './components/TeacherPanel';
 import { AddLog, LogEntry, Screen, SolvedProblem, TeacherNote } from './types';
@@ -173,7 +173,7 @@ function App() {
 
       {visited.A2 && name && (
         <div className={screen === 'ACTIVITY2' ? 'flex-1 min-h-0 flex' : 'hidden'}>
-          <Activity2 key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} a1Supports={a1Supports} solvedProblems={solved} />
+          <Activity2Shell key={`a2-${name}`} playerName={name} teacherMode={teacherMode} addLog={addLog} onTeacherNote={addTeacherNote} a1Supports={a1Supports} solvedProblems={solved} />
         </div>
       )}
 

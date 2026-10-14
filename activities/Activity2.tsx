@@ -352,7 +352,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (!isPredictTask(openId)) return;
     const id = openId;
     const r = PREDICT[id].rounds[k];
-    patch((s) => ({ roundIdx: { ...s.roundIdx, [id]: k } }));
+    // 다른 초록색으로 넘어가면 도움(글·그림 표시)은 처음으로 돌아가고, 새 초록색에서 다시 틀릴 때부터 1단계로 오른다
+    const leaving = k !== roundIdx;
+    const prevHelp = helpLevel;
+    patch((s) => ({ roundIdx: { ...s.roundIdx, [id]: k }, ...(leaving ? { help: { ...s.help, [id]: 0 } } : {}) }));
+    if (leaving && prevHelp > 0) addLog('HELP_RESET', `${task.label}. 초록색 ${r}로 넘어가 도움 ${prevHelp}단계 → 처음으로`, { activity: 'A2', taskId: id });
     setP(r);
     setView('side');
     setMorphT(0);
@@ -1507,7 +1511,7 @@ function BarSidesIcon({ choice }: { choice: BarChoice }) {
   );
 }
 
-function CellsIcon({ active }: { active: boolean }) {
+export function CellsIcon({ active }: { active: boolean }) {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26">
       <rect x="3" y="4" width="9" height="18" rx="2" fill={active ? '#fdba74' : '#e2e8f0'} stroke={active ? '#ea580c' : '#94a3b8'} strokeWidth="2" />

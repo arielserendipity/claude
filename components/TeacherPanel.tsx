@@ -159,6 +159,7 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
               <div>{TEACHER_TITLES.A1}</div>
               <div>{TEACHER_TITLES.A2}</div>
               <div className="text-xs text-slate-500 pt-1 leading-relaxed">
+                활동 2는 ‘사전 활동’(막대 그림이 시소 그림으로 바뀌는 모습 보기 · 내 자료를 만들어 보기, 정답·판정 없음)과 ‘본 활동’(네 탐구) 탭으로 나뉘며, 아래 설명은 본 활동에 대한 것입니다.
                 활동 2에서 학생에게는 판정(별·통과)이 보이지 않습니다. 학생은 생각 저장하기 · 확인하기 · 생각 수정하기 · 다음 탐구로 진행하고,
                 다음 탐구는 할 일을 마치면 열립니다. AI는 아래 기록에서 두 그림 연결의 증거(자료값 대응 · 차이 대응 · 근거로 사용)를 교사에게만 보고합니다.
                 도움은 학생이 틀릴 때마다 한 단계씩({[1, 2, 3, 4].map((k) => SUPPORT_LEVEL_LABEL[k as 1 | 2 | 3 | 4]).join(' → ')}) 나타나고, 시점·종류·계기가 기록됩니다.
