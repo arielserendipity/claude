@@ -15,7 +15,7 @@ interface Activity1Props {
   onGoActivity2: () => void;
 }
 
-const MAX_LEVEL = 10;
+const MAX_LEVEL = 7;
 
 export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupportSeen, onGoActivity2 }: Activity1Props) {
   const [blocks, setBlocks] = useState<Block[]>([]);

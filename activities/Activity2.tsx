@@ -1507,7 +1507,7 @@ function BarSidesIcon({ choice }: { choice: BarChoice }) {
   );
 }
 
-function CellsIcon({ active }: { active: boolean }) {
+export function CellsIcon({ active }: { active: boolean }) {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26">
       <rect x="3" y="4" width="9" height="18" rx="2" fill={active ? '#fdba74' : '#e2e8f0'} stroke={active ? '#ea580c' : '#94a3b8'} strokeWidth="2" />
