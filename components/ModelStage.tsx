@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, createContext, useContext, useId } from 'react';
 import { motion } from 'framer-motion';
 import {
   BEAM_HALF,
@@ -75,6 +75,12 @@ interface ModelStageProps {
 }
 
 export const MAX_ITEMS = 10;
+// 같은 화면에 그림이 둘 이상 켜져 있을 수 있다(예: 사전 활동과 본 활동). SVG의 id(빗금 무늬·화살촉)가 겹치면 가려진 쪽을 따라가 빗금이 사라지므로 그림마다 다른 id를 쓴다.
+const UidContext = createContext('');
+const useSvgIds = () => {
+  const u = useContext(UidContext);
+  return { hatch: `hatch-excess-${u}`, arrow: (id: string) => `arrow-${id}-${u}` };
+};
 const NEUTRAL = { fill: '#cbd5e1', stroke: '#475569' };
 // 새 자료의 막대 높이·추 위치는 0부터 10(MAX_U)까지
 const MIN_V = 0;
@@ -107,6 +113,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   tiltScale = 1,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const [drag, setDrag] = useState<DragState | null>(null);
   const lastRef = useRef<number>(0);
   const movedRef = useRef(false);
@@ -234,6 +241,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
       style={{ touchAction: 'none', overflow: 'visible', fontFamily: "'Jua', sans-serif" }}
       onClick={() => onSelect(null)}
     >
+      <UidContext.Provider value={uid}>
       <Defs />
       {view === 'side' ? (
         <>
@@ -253,13 +261,16 @@ export const ModelStage: React.FC<ModelStageProps> = ({
           <ModelView L={center} t={morphT} {...common} />
         </>
       )}
+      </UidContext.Provider>
     </svg>
   );
 };
 
-const Defs = () => (
+const Defs = () => {
+  const ids = useSvgIds();
+  return (
   <defs>
-    <pattern id="hatch-excess" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+    <pattern id={ids.hatch} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
       <rect width="8" height="8" fill={EXCESS.fill} />
       <line x1="0" y1="0" x2="0" y2="8" stroke={EXCESS.strong} strokeWidth="3" />
     </pattern>
@@ -268,12 +279,13 @@ const Defs = () => (
       ['excess', EXCESS.stroke],
       ['deficit', DEFICIT.stroke],
     ].map(([id, c]) => (
-      <marker key={id} id={`arrow-${id}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <marker key={id} id={ids.arrow(id)} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
         <path d="M 0 0 L 10 5 L 0 10 z" fill={c} />
       </marker>
     ))}
   </defs>
-);
+  );
+};
 
 const RegionBg = ({ region }: { region: Region }) => (
   <rect x={region.x} y={region.y} width={region.w} height={region.h} rx={24} fill="#ffffff" stroke="#e2e8f0" strokeWidth={2} />
@@ -331,6 +343,7 @@ function ModelView({
   addWeight,
   removeItem,
 }: ModelViewProps) {
+  const ids = useSvgIds();
   const { s, r1, r2 } = phases(t);
   const n = values.length;
   const g = L.barGap;
@@ -580,7 +593,7 @@ function ModelView({
                 <g className={pulseSeg(i) ? 'hint-pulse' : undefined}>
                   <polygon
                     points={polyPoints(pts)}
-                    fill={excess ? 'url(#hatch-excess)' : DEFICIT.fill}
+                    fill={excess ? `url(#${ids.hatch})` : DEFICIT.fill}
                     fillOpacity={excess ? 1 : 0.85}
                     stroke={col.stroke}
                     strokeWidth={focus ? 3 : 2}
@@ -775,6 +788,7 @@ interface StripPiece {
   from: { x: number; y: number; w: number; h: number }; // 줄로 날아오기 전의 자리(시소 그림의 거리 칸 / 막대 그림의 막대 조각)
 }
 function SumRows({ L, nonce, left, right }: { L: Layout; nonce: number; left: StripPiece[]; right: StripPiece[] }) {
+  const ids = useSvgIds();
   const D = sum(left.map((o) => o.len));
   const E = sum(right.map((o) => o.len));
   const unit = L.U1 * Math.min(1, MAX_U / Math.max(D, E, 1));
@@ -807,7 +821,7 @@ function SumRows({ L, nonce, left, right }: { L: Layout; nonce: number; left: St
                   y={row.y}
                   width={fw}
                   height={H}
-                  fill={row.dir < 0 ? DEFICIT.fill : 'url(#hatch-excess)'}
+                  fill={row.dir < 0 ? DEFICIT.fill : `url(#${ids.hatch})`}
                   stroke={row.col.stroke}
                   strokeWidth={2}
                   style={{ originX: 0, originY: 0 }}
@@ -917,6 +931,7 @@ function Cover({ region, title }: { region: Region; title: string }) {
 
 // 함께 보기에서 두 그림의 같은 부분을 화살표로 잇기
 function Connectors({ left, right, values, p, hint }: { left: Layout; right: Layout; values: number[]; p: number; hint: ActiveHint | null }) {
+  const ids = useSvgIds();
   if (!hint) return null;
   const g = left.barGap;
   const f = left.barFrac;
@@ -957,7 +972,7 @@ function Connectors({ left, right, values, p, hint }: { left: Layout; right: Lay
   return (
     <g key={hint.nonce} pointerEvents="none">
       <path d={d} fill="none" stroke="#ffffff" strokeWidth={9} strokeLinecap="round" opacity={0.8} />
-      <path d={d} fill="none" stroke={color} strokeWidth={4} strokeLinecap="round" className="marching" markerEnd={`url(#arrow-${marker})`} />
+      <path d={d} fill="none" stroke={color} strokeWidth={4} strokeLinecap="round" className="marching" markerEnd={`url(#${ids.arrow(marker)})`} />
       <circle cx={A.x} cy={A.y} r={6} fill={color} />
     </g>
   );
