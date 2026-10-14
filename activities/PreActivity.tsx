@@ -24,6 +24,9 @@ type PreItem = 1 | 2;
 const DEMO_VALUES = DEFAULT_VALUES;
 const DEMO_P = meanOf(DEMO_VALUES); // 처음 자료의 평균: 시소가 평평해지는 자리
 const START_P = 5;
+// 사전 활동의 변환 애니메이션은 천천히 (막대 하나하나가 어디로 가는지 볼 수 있도록)
+const MORPH_AUTO_MS = 9000;
+const MORPH_PLAY_MS = 7000;
 
 export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
   const [item, setItem] = useState<PreItem>(1);
@@ -47,7 +50,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
     if (morphRaf.current != null) cancelAnimationFrame(morphRaf.current);
     morphRaf.current = null;
   };
-  const animateMorph = (to: number, durationMs = 3200, delayMs = 0) => {
+  const animateMorph = (to: number, durationMs = MORPH_PLAY_MS, delayMs = 0) => {
     stopMorph();
     const from = morphTRef.current;
     const start = performance.now() + delayMs;
@@ -66,7 +69,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
     stopMorph();
     setMorphT(0);
     morphTRef.current = 0;
-    animateMorph(1, 4200, 700);
+    animateMorph(1, MORPH_AUTO_MS, 700);
   };
   useEffect(() => {
     autoPlay();
@@ -103,7 +106,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
   const playMorph = () => {
     if (view !== 'morph') setView('morph');
     const to = morphT < 0.5 ? 1 : 0;
-    animateMorph(to, 3200);
+    animateMorph(to, MORPH_PLAY_MS);
     log('PRE_MORPH_PLAY', to === 1 ? '막대 그림 → 시소 그림' : '시소 그림 → 막대 그림');
   };
   const replay = () => {
@@ -317,13 +320,6 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
           '내 자료를 만들어 보기',
           <>
             <p>자료를 마음대로 더하고, 지우고, 옮겨 보세요. 막대 그림과 시소 그림이 어떻게 함께 달라지는지 살펴보세요.</p>
-            <ul className="text-[15px] text-slate-500 space-y-1 list-disc pl-5">
-              <li>막대의 위쪽 끝(시소에서는 추)을 끌어서 옮겨요.</li>
-              <li>빈 자리 ‘+’(시소에서는 점선 추)를 눌러 자료를 더해요. 자료는 {MAX_ITEMS}개까지 놓을 수 있어요.</li>
-              <li>× 단추를 눌러 지워요. (시소에서는 추를 먼저 눌러요.)</li>
-              <li>초록색 선(받침점)도 끌어 볼 수 있어요.</li>
-            </ul>
-            <p className="text-sm text-slate-400">‘활동 1’ 단추로 활동 1에서 푼 문제를 불러올 수도 있어요.</p>
           </>
         )}
         <p className="px-2 text-sm text-slate-400 font-korean">사전 활동은 마음껏 해 봐도 돼요. 다 해 봤으면 위의 ‘본 활동’을 눌러 시작하세요.</p>
