@@ -352,7 +352,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (!isPredictTask(openId)) return;
     const id = openId;
     const r = PREDICT[id].rounds[k];
-    patch((s) => ({ roundIdx: { ...s.roundIdx, [id]: k } }));
+    // 다른 초록색으로 넘어가면 도움(글·그림 표시)은 처음으로 돌아가고, 새 초록색에서 다시 틀릴 때부터 1단계로 오른다
+    const leaving = k !== roundIdx;
+    const prevHelp = helpLevel;
+    patch((s) => ({ roundIdx: { ...s.roundIdx, [id]: k }, ...(leaving ? { help: { ...s.help, [id]: 0 } } : {}) }));
+    if (leaving && prevHelp > 0) addLog('HELP_RESET', `${task.label}. 초록색 ${r}로 넘어가 도움 ${prevHelp}단계 → 처음으로`, { activity: 'A2', taskId: id });
     setP(r);
     setView('side');
     setMorphT(0);
