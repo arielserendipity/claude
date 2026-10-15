@@ -126,7 +126,7 @@ const STEP_NOTE: Record<string, string> = {
   'change.reflect': '시소를 평평하게 지키려고 자료를 어떻게 바꾸었는지 써 보세요.',
   'custom.bar': '내 자료의 평균과 넘친 칸의 합, 모자란 칸의 합을 구해서 써 보세요.',
   'custom.beam': '평균에서 시소가 어떻게 되는지와 오른쪽·왼쪽 거리의 합을 써 보세요.',
-  'custom.link': '막대 그림에서 평균의 뜻, 시소 그림에서 평균의 뜻, 두 그림이 이어지는 점을 모두 써 보세요.',
+  'custom.link': '막대 그림에서 평균의 뜻, 시소 그림에서 평균의 뜻, 두 그림에서 평균의 공통점을 모두 써 보세요.',
 };
 
 const initialState = (): A2State => ({
