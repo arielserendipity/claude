@@ -3,7 +3,7 @@ import type { TaskId } from './lib/questions';
 export interface Block {
   id: string;
   position: number; // 0 to 10 (저울대 위 위치)
-  weight: number; // 추의 무게 (모두 1)
+  weight: number; // 자료의 무게 (모두 1)
   color: string; // hex
   isNew?: boolean; // True if added in the current round
 }
@@ -24,7 +24,7 @@ export interface LogEntry {
   details: string;
   taskId?: TaskId | ''; // 활동 2 탐구 단계
   answer?: string; // 학생 응답 (글·선택)
-  context?: string; // 응답 당시의 조건 (JSON): 제출 차수, 자료값, 실제 초록색 위치, 예상·공개 시점, 표시한 부분, 응답 전에 본 도움 등
+  context?: string; // 응답 당시의 조건 (JSON): 제출 차수, 자료값, 실제 기준선 위치, 예상·공개 시점, 표시한 부분, 응답 전에 본 도움 등
   teacherLog?: string;
   reasoning?: string;
   hint?: string; // 실제로 제공·재생한 도움이나 힌트
@@ -40,7 +40,7 @@ export interface DragLog {
   durationMs: number;
 }
 
-// 활동 1에서 균형을 맞춘 문제 (활동 2에서 막대 그림으로 불러오기)
+// 활동 1에서 수평을 맞춘 문제 (활동 2에서 막대 그림으로 불러오기)
 export interface SolvedProblem {
   level: number;
   values: number[];

@@ -57,7 +57,7 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
     nextLevelParamsRef.current = { blocksToAdd: 1, forceInteger: true };
     const first = generateNewBlocks([], 2, true);
     setBlocks(first);
-    // 받침점은 균형점에서 1칸 이상 떨어진 곳에서 시작한다
+    // 받침점은 정답 자리에서 1칸 이상 떨어진 곳에서 시작한다
     setFulcrumPosition(startFulcrum(5.5, first.reduce((a, b) => a + b.position, 0) / first.length));
     levelStartTimeRef.current = Date.now();
     setAppState('PLAYING');
@@ -160,12 +160,12 @@ export function Activity1({ teacherMode, addLog, onTeacherNote, onSolved, onSupp
     const oldBlocks = blocks.map((b) => ({ ...b, isNew: false }));
     const nextBlocks = [...oldBlocks, ...generateNewBlocks(oldBlocks, params.blocksToAdd, params.forceInteger)];
     setBlocks(nextBlocks);
-    // 새 균형점이 지금 받침점과 1칸도 안 떨어져 있으면(이전 정답과 같거나 가까우면) 받침점을 멀리 옮겨 놓고 시작한다
+    // 새 정답 자리가 지금 받침점과 1칸도 안 떨어져 있으면(이전 정답과 같거나 가까우면) 받침점을 멀리 옮겨 놓고 시작한다
     const nextMean = nextBlocks.reduce((a, b) => a + b.position, 0) / nextBlocks.length;
     const start = startFulcrum(fulcrumPosition, nextMean);
     if (start !== fulcrumPosition) setFulcrumPosition(start);
     if (params.forceInteger && !Number.isInteger(nextMean)) {
-      log('HALF_ALLOWED', `Level ${level + 1}: 추 ${params.blocksToAdd}개로는 자연수 정답을 바꿀 수 없어 0.5 정답(${nextMean}) 허용`);
+      log('HALF_ALLOWED', `Level ${level + 1}: 자료 ${params.blocksToAdd}개로는 자연수 정답을 바꿀 수 없어 0.5 정답(${nextMean}) 허용`);
     }
     levelStartTimeRef.current = Date.now();
     setAppState('PLAYING');

@@ -5,8 +5,8 @@ import { AI_GUIDE, PREDICT, STUDENT_LEVEL_GUIDE, TASKS, isPredictTask, promptFor
 import { SUPPORT_LEVEL_LABEL, TEACHER_HELP_TEXT } from '../lib/hints';
 
 export const TEACHER_TITLES = {
-  A1: '활동 1 — 균형점 모델 예제 풀기',
-  A2: '활동 2 — 균형점 모델과 막대 모델 연결하기',
+  A1: '활동 1 — 받침점 모델 예제 풀기',
+  A2: '활동 2 — 받침점 모델과 막대 모델 연결하기',
 };
 
 const TEACHER_PIN: string = ((import.meta as any).env?.VITE_TEACHER_PIN as string) || '';
@@ -203,9 +203,9 @@ export function TeacherPanel({ onClose, notes, logs, playerName, sheetUrl, setSh
               {showRubric && (
                 <div className="px-4 pb-4 space-y-4">
                   <div className="text-xs text-slate-500">
-                    1번·4번 자료(3번의 ‘처음 자료’): 2, 3, 4, 4, 6, 7, 9 (평균 5). 초록색 4: 넘침 10 · 모자람 3 / 5: 7 · 7 / 6: 4 · 11.
+                    1번·4번 자료(3번의 ‘처음 자료’): 2, 3, 4, 4, 6, 7, 9 (평균 5). 기준선 4: 넘침 10 · 모자람 3 / 5: 7 · 7 / 6: 4 · 11.
                     <br />
-                    2번 자료: 3, 4, 5, 8, 10 (평균 6). 초록색 4: 넘침 11 · 모자람 1 / 6: 6 · 6 / 7: 4 · 9. 초록 선(기준선)·받침점은 평균이 아닌 곳에도 놓일 수 있습니다.
+                    2번 자료: 3, 4, 5, 8, 10 (평균 6). 기준선 4: 넘침 11 · 모자람 1 / 6: 6 · 6 / 7: 4 · 9. 기준선·받침점은 평균이 아닌 곳에도 놓일 수 있습니다.
                     <br />
                     같은 자료는 처음부터 같은 색·이름표로 이어 보여 줍니다. 확인하기는 정오 판정 없이 가려 둔 그림을 보여 줍니다.
                   </div>

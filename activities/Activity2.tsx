@@ -62,12 +62,12 @@ import { fmt } from '../lib/geometry';
 // - 학생에게는 판정(별·통과)을 보여 주지 않는다. 예상 저장하기 · 확인하기 · 생각 저장하기 · 생각 수정하기 · 다음 탐구만 있다.
 // - 도움은 학생이 틀릴 때마다 한 단계씩 올라간다(예상과 결과가 다를 때, 바꾼 자료에서 시소가 기울 때, 나만의 자료에서 구할 수가 빠졌을 때).
 // - 확인하기는 정오 대신 가려 둔 그림 자체를 보여 준다(시소가 기울거나, 막대 그림이 칸과 함께 나타남).
-// - 답이 틀리면 넘어가지 못한다: 1·2번은 고른 예상과 까닭이 모두 맞아야 다음 초록색으로 가고(틀리면 같은 자리에서 다시 예상),
+// - 답이 틀리면 넘어가지 못한다: 1·2번은 고른 예상과 까닭이 모두 맞아야 다음 기준선으로 가고(틀리면 같은 자리에서 다시 예상),
 //   정리하는 글·3번 칸·4번 방법은 규칙 검사(lib/answerCheck)를 통과해야 한다. 막히면 도움 4단계에서 선생님이 풀어 줄 수 있다.
 // - AI 분석은 학생의 진행과 관계없이 교사 기록에만 남는다.
 // - 같은 자료는 처음부터 같은 색·이름표로 잇는다. 학생은 기준과의 차이(넘침·모자람 ↔ 오른쪽·왼쪽 거리)와 그 관계를 생각한다.
 // - 변환 애니메이션은 먼저 생각을 남긴 뒤(또는 도움 3단계) 쓸 수 있고, 가려 둔 그림이 있을 때는 쓸 수 없다.
-// - 응답마다 그때의 화면 조건(자료값, 실제 초록색 위치, 예상·공개 시점, 응답 전에 본 도움)을 함께 기록한다.
+// - 응답마다 그때의 화면 조건(자료값, 실제 기준선 위치, 예상·공개 시점, 응답 전에 본 도움)을 함께 기록한다.
 // ---------------------------------------------------------------------------
 
 interface SavedText {
@@ -84,7 +84,7 @@ interface RoundState {
   revealed: boolean;
   revealedAt?: string;
   passed?: boolean; // 확인한 결과 예상과 까닭이 모두 맞았는지 (맞아야 다음으로 간다)
-  attempts?: number; // 이 초록색에서 예상한 횟수
+  attempts?: number; // 이 기준선에서 예상한 횟수
 }
 
 interface SupportEvent {
@@ -100,7 +100,7 @@ interface A2State {
   saved: Record<string, SavedText>;
   done: Record<TaskId, boolean>;
   help: Record<TaskId, number>; // 지금까지 받은 도움 단계 (0~4)
-  rounds: Record<string, RoundState>; // `${task}.${초록색 위치}`
+  rounds: Record<string, RoundState>; // `${task}.${기준선 위치}`
   roundIdx: Record<PredictTaskId, number>;
   work: number[]; // 자료 바꾸기용 복사본
   checks: { before: number[]; after: number[]; tilt: Tilt; at: string }[];
@@ -161,14 +161,14 @@ function loadState(key: string): A2State {
   };
 }
 
-// 탐구를 열 때 초록색의 처음 위치
+// 탐구를 열 때 기준선의 처음 위치
 const startPOf = (id: TaskId, st: A2State) => (isPredictTask(id) ? PREDICT[id].rounds[st.roundIdx[id]] : id === 'change' ? CHANGE_P : 5);
 
 const HINT_STEP_MS = 7000;
 
 // 도움 단계별 시각 힌트. 1단계는 글만 나오고 2단계부터 그림이 바뀐다.
 //  cells: 막대 그림에 칸(넘친 칸·모자란 칸) 표시가 켜지는 단계
-//  curves: 시소 그림에 받침점에서 각 추까지의 거리가 곡선과 숫자로 나오는 단계 (이때 시소 그림의 칸 막대는 걷는다)
+//  curves: 시소 그림에 받침점에서 각 자료까지의 거리가 곡선과 숫자로 나오는 단계 (이때 시소 그림의 칸 막대는 걷는다)
 //  sums: 막대 그림의 모자란 칸·넘친 칸과 시소 그림의 왼쪽·오른쪽 거리를 각각 한 줄로 모아 비교하는 단계
 const HELP_VISUALS: Record<TaskId, { cells: number; curves: number; sums?: number }> = {
   predictSeesaw: { cells: 3, curves: 2 }, // 1번: 2단계 거리만, 3단계 거리 + 칸
@@ -216,7 +216,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const [openId, setOpenId] = useState<TaskId>(() => (TASKS.find((t) => !st.done[t.id]) ?? TASKS[TASKS.length - 1]).id);
   const [editing, setEditing] = useState<Record<string, boolean>>({});
 
-  // 예상하기: 지금 탐구의 자료·초록색 위치·라운드
+  // 예상하기: 지금 탐구의 자료·기준선 위치·라운드
   const pset = isPredictTask(openId) ? PREDICT[openId] : null;
   const roundIdx = isPredictTask(openId) ? st.roundIdx[openId] : 0;
   const round = pset ? pset.rounds[roundIdx] : null;
@@ -352,11 +352,11 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     if (!isPredictTask(openId)) return;
     const id = openId;
     const r = PREDICT[id].rounds[k];
-    // 다른 초록색으로 넘어가면 도움(글·그림 표시)은 처음으로 돌아가고, 새 초록색에서 다시 틀릴 때부터 1단계로 오른다
+    // 다른 기준선으로 넘어가면 도움(글·그림 표시)은 처음으로 돌아가고, 새 기준선에서 다시 틀릴 때부터 1단계로 오른다
     const leaving = k !== roundIdx;
     const prevHelp = helpLevel;
     patch((s) => ({ roundIdx: { ...s.roundIdx, [id]: k }, ...(leaving ? { help: { ...s.help, [id]: 0 } } : {}) }));
-    if (leaving && prevHelp > 0) addLog('HELP_RESET', `${task.label}. 초록색 ${r}로 넘어가 도움 ${prevHelp}단계 → 처음으로`, { activity: 'A2', taskId: id });
+    if (leaving && prevHelp > 0) addLog('HELP_RESET', `${task.label}. 기준선 ${r}로 넘어가 도움 ${prevHelp}단계 → 처음으로`, { activity: 'A2', taskId: id });
     setP(r);
     setView('side');
     setMorphT(0);
@@ -364,7 +364,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setSelected(null);
     clearHints();
     setTiltScale(1);
-    addLog('PREDICT_ROUND', `초록색 ${r}`, { activity: 'A2', taskId: id });
+    addLog('PREDICT_ROUND', `기준선 ${r}`, { activity: 'A2', taskId: id });
   };
 
   const hasFirstThought = (id: TaskId) => {
@@ -463,7 +463,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
       context: JSON.stringify(context),
       hint: inp.supportsSeen?.join(', ') ?? '',
     });
-    const title = `활동 2 · ${TASK_BY_ID[args.task].label}. ${TASK_BY_ID[args.task].title} · ${args.stepTitle}${inp.round != null ? ` (초록색 ${inp.round})` : ''} · ${
+    const title = `활동 2 · ${TASK_BY_ID[args.task].label}. ${TASK_BY_ID[args.task].title} · ${args.stepTitle}${inp.round != null ? ` (기준선 ${inp.round})` : ''} · ${
       args.kind === 'first' ? '처음 응답' : `수정 ${args.attempt - 1}`
     }`;
     analyze({ ...inp, text: answer }, args.attempt, title);
@@ -592,21 +592,21 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     setP(round);
     if (openId === 'predictSeesaw') animateTilt();
     const actual = outcomeAt(openId, PREDICT[openId].values, round);
-    addLog('REVEAL', `초록색 ${round}: 예상 ${prediction ? predictionLabel(prediction) : '-'} / 실제 ${predictionLabel(actual)}`, {
+    addLog('REVEAL', `기준선 ${round}: 예상 ${prediction ? predictionLabel(prediction) : '-'} / 실제 ${predictionLabel(actual)}`, {
       activity: 'A2',
       taskId: openId,
     });
-    addLog('JUDGE', `초록색 ${round}: ${j.ok ? '예상과 까닭이 맞음' : `틀림 (${j.why.join(' / ')})`}${teacherMode && !j.ok ? ' · 교사 미리보기라 넘어감' : ''}`, {
+    addLog('JUDGE', `기준선 ${round}: ${j.ok ? '예상과 까닭이 맞음' : `틀림 (${j.why.join(' / ')})`}${teacherMode && !j.ok ? ' · 교사 미리보기라 넘어감' : ''}`, {
       activity: 'A2',
       taskId: openId,
       teacherLog: j.why.join(' / '),
     });
     // 예상이 결과와 다르거나('아직 모르겠어요' 포함) 까닭이 맞지 않으면 도움을 한 단계 올린다
     if (!passed) {
-      raiseHelp(`초록색 ${round}: 예상 ${prediction ? predictionLabel(prediction) : '-'}, 결과 ${predictionLabel(actual)} · ${j.why.join(', ')}`);
+      raiseHelp(`기준선 ${round}: 예상 ${prediction ? predictionLabel(prediction) : '-'}, 결과 ${predictionLabel(actual)} · ${j.why.join(', ')}`);
     }
   };
-  // 틀렸을 때: 같은 초록색에서 가려 둔 그림을 다시 가리고 처음부터 다시 예상한다 (이전 까닭은 기록에 남는다)
+  // 틀렸을 때: 같은 기준선에서 가려 둔 그림을 다시 가리고 처음부터 다시 예상한다 (이전 까닭은 기록에 남는다)
   const retryRound = () => {
     if (!isPredictTask(openId) || round == null) return;
     const key = `${openId}.reason.${round}`;
@@ -622,7 +622,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
     clearHints();
     setTiltScale(1);
     setP(round);
-    addLog('RETRY_ROUND', `초록색 ${round}: 다시 예상하기 (${tries}번째)`, { activity: 'A2', taskId: openId });
+    addLog('RETRY_ROUND', `기준선 ${round}: 다시 예상하기 (${tries}번째)`, { activity: 'A2', taskId: openId });
   };
   // 도움 4단계까지 막힌 학생을 선생님이 확인하고 넘겨 줄 때 (교사 코드). 입력한 글자는 학생이 볼 수 없게 가려서 보여 준다.
   const askTeacher = (onPass: () => void) => setTeacherAsk({ onPass });
@@ -643,7 +643,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const teacherPassRound = () => {
     if (!isPredictTask(openId) || round == null) return;
     setRound(openId, round, { passed: true });
-    addLog('TEACHER_PASS', `${openId} 초록색 ${round}`, { activity: 'A2', taskId: openId });
+    addLog('TEACHER_PASS', `${openId} 기준선 ${round}`, { activity: 'A2', taskId: openId });
   };
   const historyOf = (id: PredictTaskId) =>
     PREDICT[id].rounds.map((r) => {
@@ -721,7 +721,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
   const importable = solvedProblems.filter((s) => s.values.length >= 2 && s.values.length <= MAX_ITEMS);
   const customReady = st.custom.length >= 2;
 
-  // 막대 끝이나 추를 끌어 자료값 바꾸기 (3번: 나만의 자료, 4번: 복사본)
+  // 막대 끝이나 자료를 끌어 자료값 바꾸기 (3번: 나만의 자료, 4번: 복사본)
   const editValue = (i: number, v: number) => {
     if (openId === 'change') {
       patch((s) => ({ work: s.work.map((x, k) => (k === i ? v : x)) }));
@@ -859,14 +859,14 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
           <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-3 py-2 font-korean text-[15px] text-slate-700">
             {id === 'predictSeesaw' ? (
               <>
-                시소를 보여 주었어요. 초록색이 {round}일 때 시소는 <b>{CHOICE_LABEL[actual as Choice]}</b>.
+                시소를 보여 주었어요. 기준선이 {round}일 때 시소는 <b>{CHOICE_LABEL[actual as Choice]}</b>.
               </>
             ) : (
               <>
-                막대 그림을 칸과 함께 보여 주었어요. 초록색이 {round}일 때 <b>{BAR_CHOICE_LABEL[actual as BarChoice]}</b>.
+                막대 그림을 칸과 함께 보여 주었어요. 기준선이 {round}일 때 <b>{BAR_CHOICE_LABEL[actual as BarChoice]}</b>.
               </>
             )}
-            <span className="block text-sm text-slate-500 mt-0.5">초록색을 옮겨 보며 두 그림을 더 살펴봐도 좋아요.</span>
+            <span className="block text-sm text-slate-500 mt-0.5">기준선을 옮겨 보며 두 그림을 더 살펴봐도 좋아요.</span>
           </div>
         )}
         {rs.revealed && !roundPassed(rs) && (
@@ -887,7 +887,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
         )}
         {rs.revealed && roundPassed(rs) && !last && (
           <ActionButton onClick={() => goRound(roundIdx + 1)} icon={<ArrowRight size={18} />}>
-            초록색 {set.rounds[roundIdx + 1]}에서 예상하기
+            기준선 {set.rounds[roundIdx + 1]}에서 예상하기
           </ActionButton>
         )}
         {allPassed(id) &&
@@ -961,7 +961,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
 
           {isPredictTask(openId) && pset && (
             <div className="ml-auto flex items-center gap-1 bg-emerald-50 border border-emerald-200 rounded-2xl p-1 font-korean text-sm">
-              <span className="px-2 text-emerald-700">초록색</span>
+              <span className="px-2 text-emerald-700">기준선</span>
               {pset.rounds.map((r, k) => {
                 const doneR = roundPassed(st.rounds[roundKey(openId, r)]);
                 const can = teacherMode || k === 0 || roundPassed(st.rounds[roundKey(openId, pset.rounds[k - 1])]);
@@ -1145,7 +1145,7 @@ export function Activity2({ playerName, teacherMode, addLog, onTeacherNote, a1Su
                       {methodOk && (
                         <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 font-korean text-[15px] text-slate-700 flex flex-col gap-2">
                           <span>
-                            막대 끝이나 추를 끌어 값을 바꾸고, ‘+’ 자리를 눌러 자료를 더하고, ×로 지워 보세요. 받침점은 5에 그대로예요.
+                            막대 끝이나 자료를 끌어 값을 바꾸고, ‘+’ 자리를 눌러 자료를 더하고, ×로 지워 보세요. 받침점은 5에 그대로예요.
                           </span>
                           <span className="text-sm text-slate-500">
                             자료 {st.work.length}개 · 바꾼 모습: {describeDiff(DEFAULT_VALUES, st.work)}
@@ -1494,7 +1494,7 @@ function TiltIcon({ choice }: { choice: Choice }) {
   );
 }
 
-// 막대 그림 예상 단추의 작은 막대 그림: 초록 선 위로 넘친 부분(주황)과 초록 선까지 모자란 부분(파랑 점선)
+// 막대 그림 예상 단추의 작은 막대 그림: 기준선 위로 넘친 부분(주황)과 기준선까지 모자란 부분(파랑 점선)
 function BarSidesIcon({ choice }: { choice: BarChoice }) {
   if (choice === 'unsure') return <UnsureMark />;
   const LINE = 12;

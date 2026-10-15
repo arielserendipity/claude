@@ -136,8 +136,8 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
   };
   const importable = solvedProblems.filter((s) => s.values.length >= 2 && s.values.length <= MAX_ITEMS);
 
-  // ---------- 초록색이 평균에 맞으면 알려 준다 (사전 활동 2) ----------
-  // 처음부터 맞아 있는 상태에서는 알리지 않고, 학생이 초록색이나 자료를 움직여 새로 맞췄을 때만 알린다.
+  // ---------- 기준선이 평균에 맞으면 알려 준다 (사전 활동 2) ----------
+  // 처음부터 맞아 있는 상태에서는 알리지 않고, 학생이 기준선이나 자료를 움직여 새로 맞췄을 때만 알린다.
   const meanOfCustom = meanOf(custom);
   const matched = custom.length >= 2 && Number.isFinite(meanOfCustom) && Math.abs(p2 - meanOfCustom) < 1e-9;
   const [cheer, setCheer] = useState(false);
@@ -147,7 +147,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
   useEffect(() => {
     if (matched && !prevMatched.current && Date.now() > quietUntil.current) {
       setCheer(true);
-      log('PRE_MEAN_MATCH', `초록색 ${fmt(p2)} = 자료의 평균 ${fmt(meanOfCustom)} (자료 [${custom.join(', ')}])`);
+      log('PRE_MEAN_MATCH', `기준선 ${fmt(p2)} = 자료의 평균 ${fmt(meanOfCustom)} (자료 [${custom.join(', ')}])`);
       if (Date.now() - lastConfetti.current > 2000) {
         lastConfetti.current = Date.now();
         confetti({ particleCount: 70, spread: 70, startVelocity: 32, origin: { y: 0.45 } });
@@ -274,7 +274,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
           {celebrating && (
             <div className="absolute top-1 inset-x-0 z-10 flex justify-center pointer-events-none">
               <div role="status" className="pop flex items-center gap-2 rounded-full bg-emerald-500 text-white px-5 py-2 shadow-lg font-korean text-lg whitespace-nowrap">
-                <PartyPopper size={22} /> 평균이에요! 초록색이 평균 {fmt(meanOfCustom)}에 있어서 시소가 평평해요
+                <PartyPopper size={22} /> 평균이에요! 기준선이 평균 {fmt(meanOfCustom)}에 있어서 시소가 평평해요
               </div>
             </div>
           )}
