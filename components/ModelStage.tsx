@@ -72,6 +72,7 @@ interface ModelStageProps {
   lockP?: boolean; // 초록색(초록 선·받침점)을 끌어 옮기지 못하게
   allowAddRemove?: boolean; // 막대·추를 더하거나 지울 수 있는지 (끄면 값만 바꿈)
   tiltScale?: number; // 시소가 기우는 정도 (0~1, 공개할 때 0→1로 움직임)
+  celebrate?: boolean; // 초록색이 평균에 맞을 때 초록 선·손잡이·받침점을 반짝여 알린다 (사전 활동 2번)
 }
 
 export const MAX_ITEMS = 10;
@@ -111,6 +112,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
   lockP = false,
   allowAddRemove = true,
   tiltScale = 1,
+  celebrate = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -224,6 +226,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     lockP,
     allowAddRemove,
     tiltScale,
+    celebrate,
     editable,
     canAdd,
     select,
@@ -312,6 +315,7 @@ interface ModelViewProps {
   lockP: boolean;
   allowAddRemove: boolean;
   tiltScale: number;
+  celebrate: boolean;
   editable: boolean;
   canAdd: boolean;
   select: (i: number, kind: 'bar' | 'weight') => void;
@@ -335,6 +339,7 @@ function ModelView({
   lockP,
   allowAddRemove,
   tiltScale,
+  celebrate,
   editable,
   canAdd,
   select,
@@ -362,6 +367,7 @@ function ModelView({
   const early = 1 - clamp01(r1 * 1.6);
 
   const hk = hint?.key;
+  const meanGlow = hk === 'MEAN_LINK' || celebrate; // 초록 선·손잡이·받침점을 반짝인다
   // 거리 곡선·한 줄 합 힌트는 자료를 바꾸는 중에도 떠 있을 수 있다 (바꾸면 힌트가 사라진다). 다른 힌트(애니메이션)가 재생되는 동안만 편집을 막는다.
   const editLock = hk != null && hk !== 'DISTANCE_CURVES' && hk !== 'SUM_BALANCE';
   const targetIdx = hint?.target != null ? values.indexOf(hint.target) : -1;
@@ -657,7 +663,7 @@ function ModelView({
       {/* 초록 선 (막대 그림의 기준선) */}
       {r2 < 1 && (
         <g opacity={1 - r2}>
-          {hk === 'MEAN_LINK' && (
+          {meanGlow && (
             <line x1={meanLine[0].x} y1={meanLine[0].y} x2={meanLine[1].x} y2={meanLine[1].y} stroke={MEAN.strong} strokeLinecap="round" className="glow-line" pointerEvents="none" />
           )}
           <line x1={meanLine[0].x} y1={meanLine[0].y} x2={meanLine[1].x} y2={meanLine[1].y} stroke={MEAN.stroke} strokeWidth={4} strokeLinecap="round" pointerEvents="none" />
@@ -680,7 +686,7 @@ function ModelView({
             onPointerDown={atBar && !lockP ? (e) => startDrag(e, 'line', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
-            {hk === 'MEAN_LINK' && <circle r={27} fill={MEAN.strong} opacity={0.35} className="hint-pulse" />}
+            {meanGlow && <circle r={27} fill={MEAN.strong} opacity={0.35} className="hint-pulse" />}
             <circle r={18} fill={MEAN.stroke} stroke="#fff" strokeWidth={3} />
             <text y={6} textAnchor="middle" fontSize={16} fill="#fff">
               {fmt(p)}
@@ -705,7 +711,7 @@ function ModelView({
             onPointerDown={atBalance && !lockP ? (e) => startDrag(e, 'fulcrum', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
-            {hk === 'MEAN_LINK' && <circle cy={24} r={34} fill={MEAN.strong} opacity={0.35} className="hint-pulse" />}
+            {meanGlow && <circle cy={24} r={34} fill={MEAN.strong} opacity={0.35} className="hint-pulse" />}
             <rect x={-34} y={0} width={68} height={42} fill="transparent" />
             <path d="M 0 0 L 25 42 L -25 42 Z" fill={MEAN.stroke} stroke="#14532d" strokeWidth={2} strokeLinejoin="round" />
           </g>
