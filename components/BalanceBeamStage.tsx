@@ -12,7 +12,7 @@ interface BalanceBeamStageProps {
   onFulcrumDragEnd?: (startPos: number, finalPos: number) => void;
   appState: AppState;
   average: number;
-  hintLevel: 0 | 1 | 2; // 1: 추-받침점 거리 곡선, 2: + 왼쪽/오른쪽 거리의 합 막대
+  hintLevel: 0 | 1 | 2; // 1: 자료-받침점 거리 곡선, 2: + 왼쪽/오른쪽 거리의 합 막대
   hintVisible: boolean;
   showDragCue: boolean;
 }
@@ -132,7 +132,7 @@ export const BalanceBeamStage: React.FC<BalanceBeamStageProps> = ({
 
   const weightTop = (i: number) => APEX_Y - 2 * BH - (stacks[i] + 1) * wH;
 
-  // 거리 곡선: 가까운 추부터 낮게, 먼 추일수록 높게
+  // 거리 곡선: 가까운 자료부터 낮게, 먼 자료일수록 높게
   const curves = blocks
     .map((b, i) => ({ b, i, d: Math.abs(b.position - fulcrumPosition) }))
     .filter((c) => c.d > 1e-9)
@@ -214,7 +214,7 @@ export const BalanceBeamStage: React.FC<BalanceBeamStageProps> = ({
         ))}
       </motion.g>
 
-      {/* 저울대 + 추 (받침점 꼭짓점을 중심으로 기울어짐) */}
+      {/* 저울대 + 자료 (받침점 꼭짓점을 중심으로 기울어짐) */}
       <g transform={`rotate(${angle.toFixed(3)} ${xp} ${APEX_Y})`}>
         <rect x={BX - 18} y={BEAM_Y - BH} width={MAX_U * U + 36} height={BH * 2} rx={BH} fill={BEAM.fill} stroke={BEAM.stroke} strokeWidth={2.5} />
         {Array.from({ length: MAX_U + 1 }, (_, u) => (
@@ -242,7 +242,7 @@ export const BalanceBeamStage: React.FC<BalanceBeamStageProps> = ({
           );
         })}
 
-        {/* 추와 받침점 사이 거리 곡선 (힌트 1단계) */}
+        {/* 자료와 받침점 사이 거리 곡선 (힌트 1단계) */}
         {showCurves &&
           curves.map((c, order) => {
             const sx = xOf(c.b.position);
@@ -267,7 +267,7 @@ export const BalanceBeamStage: React.FC<BalanceBeamStageProps> = ({
           })}
       </g>
 
-      {/* 균형을 찾았을 때: 받침점 위로 별 */}
+      {/* 수평을 찾았을 때: 받침점 위로 별 */}
       {appState === 'LEVEL_CLEAR' && (
         <g pointerEvents="none">
           <line x1={xp} x2={xp} y1={60} y2={BEAM_Y - BH - 4} stroke="#facc15" strokeWidth={4} strokeDasharray="2 8" strokeLinecap="round" />

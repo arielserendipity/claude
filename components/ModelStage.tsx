@@ -65,14 +65,14 @@ interface ModelStageProps {
   onRemoveValue?: (i: number) => void;
   hint: ActiveHint | null;
   // 같은 자료를 같은 색·이름표로 보여 주고, 하나를 누르면 짝을 함께 강조한다.
-  // 끄면 막대·추를 같은 중립색으로 그리고 짝 강조를 하지 않는다 (학생이 대응을 스스로 찾을 때).
+  // 끄면 막대·자료를 같은 중립색으로 그리고 짝 강조를 하지 않는다 (학생이 대응을 스스로 찾을 때).
   pairCues?: boolean;
   hideBalance?: boolean; // 시소 그림을 가린다 (예상한 뒤 공개)
   hideBars?: boolean; // 막대 그림을 가린다 (시소 그림을 보고 예상한 뒤 공개)
-  lockP?: boolean; // 초록색(초록 선·받침점)을 끌어 옮기지 못하게
-  allowAddRemove?: boolean; // 막대·추를 더하거나 지울 수 있는지 (끄면 값만 바꿈)
+  lockP?: boolean; // 기준선(막대 그림의 선·시소 그림의 받침점)을 끌어 옮기지 못하게
+  allowAddRemove?: boolean; // 막대·자료를 더하거나 지울 수 있는지 (끄면 값만 바꿈)
   tiltScale?: number; // 시소가 기우는 정도 (0~1, 공개할 때 0→1로 움직임)
-  celebrate?: boolean; // 초록색이 평균에 맞을 때 초록 선·손잡이·받침점을 반짝여 알린다 (사전 활동 2번)
+  celebrate?: boolean; // 기준선이 평균에 맞을 때 기준선·손잡이·받침점을 반짝여 알린다 (사전 활동 2번)
 }
 
 export const MAX_ITEMS = 10;
@@ -83,7 +83,7 @@ const useSvgIds = () => {
   return { hatch: `hatch-excess-${u}`, arrow: (id: string) => `arrow-${id}-${u}` };
 };
 const NEUTRAL = { fill: '#cbd5e1', stroke: '#475569' };
-// 새 자료의 막대 높이·추 위치는 0부터 10(MAX_U)까지
+// 새 자료의 막대 높이·자료 위치는 0부터 10(MAX_U)까지
 const MIN_V = 0;
 const clampV = (u: number) => Math.max(MIN_V, Math.min(MAX_U, Math.round(u)));
 
@@ -139,7 +139,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
     return { x: r.x, y: r.y };
   };
 
-  // 초록색(초록 선·받침점)은 0.5칸 단위로 움직인다. 평균에 저절로 붙지 않는다 (학생의 판단을 그대로 남기기 위해).
+  // 기준선(막대 그림의 선·시소 그림의 받침점)은 0.5칸 단위로 움직인다. 평균에 저절로 붙지 않는다 (학생의 판단을 그대로 남기기 위해).
   const snapP = (u: number) => {
     const c = Math.max(0, Math.min(MAX_U, u));
     return Math.round(c * 2) / 2;
@@ -251,7 +251,7 @@ export const ModelStage: React.FC<ModelStageProps> = ({
           <RegionBg region={SIDE_LEFT} />
           <RegionBg region={SIDE_RIGHT} />
           <LinkBadge x={(SIDE_LEFT.x + SIDE_LEFT.w + SIDE_RIGHT.x) / 2} y={SIDE_LEFT.y + SIDE_LEFT.h / 2} />
-          {/* 가린 그림은 아예 그리지 않는다 (초록 선 손잡이처럼 영역 밖으로 나오는 부분까지 감추기 위해) */}
+          {/* 가린 그림은 아예 그리지 않는다 (기준선 손잡이처럼 영역 밖으로 나오는 부분까지 감추기 위해) */}
           {!hideBars && <ModelView L={left} t={0} {...common} />}
           {!hideBalance && <ModelView L={right} t={1} {...common} />}
           {!hideBalance && !hideBars && <Connectors left={left} right={right} values={values} p={p} hint={hint} />}
@@ -367,7 +367,7 @@ function ModelView({
   const early = 1 - clamp01(r1 * 1.6);
 
   const hk = hint?.key;
-  const meanGlow = hk === 'MEAN_LINK' || celebrate; // 초록 선·손잡이·받침점을 반짝인다
+  const meanGlow = hk === 'MEAN_LINK' || celebrate; // 기준선·손잡이·받침점을 반짝인다
   // 거리 곡선·한 줄 합 힌트는 자료를 바꾸는 중에도 떠 있을 수 있다 (바꾸면 힌트가 사라진다). 다른 힌트(애니메이션)가 재생되는 동안만 편집을 막는다.
   const editLock = hk != null && hk !== 'DISTANCE_CURVES' && hk !== 'SUM_BALANCE';
   const targetIdx = hint?.target != null ? values.indexOf(hint.target) : -1;
@@ -447,7 +447,7 @@ function ModelView({
           );
         })}
 
-        {/* 막대 (→ 추) */}
+        {/* 막대 (→ 자료) */}
         {values.map((v, i) => {
           const top = leveling ? Math.min(v, p) : v;
           const pts = localRect(L, t, 0, top, i + g, i + g + f, weightRect(L, i, v));
@@ -523,10 +523,10 @@ function ModelView({
             return <DeleteButton key={`del-bar-${i}`} x={pos.x} y={pos.y} onClick={() => removeItem(i)} />;
           })}
 
-        {/* 새 자료: 저울대 위 점선 추를 누르면 그 자리에 추가 놓인다 */}
+        {/* 새 자료: 저울대 위 점선 자료를 누르면 그 자리에 자료가 놓인다 */}
         {canAdd && atBalance && !editLock && <GhostWeights L={L} values={values} onAdd={addWeight} />}
 
-        {/* 추 */}
+        {/* 자료 */}
         {lateR > 0 &&
           values.map((v, i) => {
             const wr = weightRect(L, i, v);
@@ -578,7 +578,7 @@ function ModelView({
           );
         })()}
 
-        {/* 초록 선보다 넘친 칸(주황) / 모자란 칸(파랑) → 추와 받침점 사이 거리 */}
+        {/* 기준선보다 넘친 칸(주황) / 모자란 칸(파랑) → 자료와 받침점 사이 거리 */}
         {!leveling &&
           values.map((v, i) => {
             if (Math.abs(v - p) < 1e-9 || !segOn(i) || curvesOn) return null; // 곡선과 숫자를 보여 줄 때는 칸 막대를 걷는다
@@ -626,7 +626,7 @@ function ModelView({
             );
           })}
 
-        {/* 도움 3단계: 받침점(초록색)에서 각 추까지의 거리를 곡선과 숫자로 */}
+        {/* 도움 3단계: 받침점(기준선)에서 각 자료까지의 거리를 곡선과 숫자로 */}
         {curvesOn && lateR > 0 && <DistanceCurves L={L} values={values} p={p} pivotX={pivot.x} nonce={hint?.nonce ?? 0} opacity={lateR} />}
 
         {/* 막대 값 (칸 위에 보이도록 마지막에) */}
@@ -660,7 +660,7 @@ function ModelView({
       {/* 막대 그림: 모자란 칸과 넘친 칸을 시소 그림과 똑같은 모양의 두 줄로 모아 비교 */}
       {barCompare && <BarCompareOverlay L={L} values={values} p={p} nonce={hint?.nonce ?? 0} />}
 
-      {/* 초록 선 (막대 그림의 기준선) */}
+      {/* 기준선 (막대 그림에서는 가로선) */}
       {r2 < 1 && (
         <g opacity={1 - r2}>
           {meanGlow && (
@@ -721,7 +721,7 @@ function ModelView({
             onPointerDown={atBalance && !lockP ? (e) => startDrag(e, 'fulcrum', L) : undefined}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 초록 선 손잡이와 같은 초록 동그라미: 두 그림의 '초록색'이 같은 것임을 보여 준다 */}
+            {/* 기준선 손잡이와 같은 초록 동그라미: 두 그림의 '기준선'이 같은 것임을 보여 준다 */}
             <circle r={18} fill={MEAN.stroke} stroke="#fff" strokeWidth={3} />
             <text y={6} textAnchor="middle" fontSize={16} fill="#fff">
               {fmt(p)}
@@ -852,7 +852,7 @@ function SumRows({ L, nonce, left, right }: { L: Layout; nonce: number; left: St
   );
 }
 
-// 시소 그림: 왼쪽 거리들(파랑)과 오른쪽 거리들(주황)을 각각 한 줄로 모은다. 조각은 추와 받침점 사이의 거리 칸에서 날아온다.
+// 시소 그림: 왼쪽 거리들(파랑)과 오른쪽 거리들(주황)을 각각 한 줄로 모은다. 조각은 자료와 받침점 사이의 거리 칸에서 날아온다.
 function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]; p: number; nonce: number }) {
   const piece = (v: number, i: number): StripPiece => {
     const lo = Math.min(v, p);
@@ -864,7 +864,7 @@ function SumStripsOverlay({ L, values, p, nonce }: { L: Layout; values: number[]
   return <SumRows L={L} nonce={nonce} left={left} right={right} />;
 }
 
-// 시소 그림: 받침점(초록색)에서 각 추까지의 거리를 곡선과 숫자로 (왼쪽 파랑, 오른쪽 주황). 가까운 추는 낮게, 먼 추는 높게 그린다.
+// 시소 그림: 받침점(기준선)에서 각 자료까지의 거리를 곡선과 숫자로 (왼쪽 파랑, 오른쪽 주황). 가까운 자료는 낮게, 먼 자료는 높게 그린다.
 function DistanceCurves({ L, values, p, pivotX, nonce, opacity }: { L: Layout; values: number[]; p: number; pivotX: number; nonce: number; opacity: number }) {
   const items = values
     .map((v, i) => ({ v, i, d: Math.abs(v - p) }))
@@ -879,7 +879,7 @@ function DistanceCurves({ L, values, p, pivotX, nonce, opacity }: { L: Layout; v
         const sy = wr.y0 - 8;
         const cxp = (sx + pivotX) / 2;
         const cyp = Math.min(sy, ey) - 34 - order * 20;
-        // 숫자는 곡선의 38% 지점에 둔다: 이웃한 추의 숫자끼리 겹치지 않도록 추 쪽으로 치우친다
+        // 숫자는 곡선의 38% 지점에 둔다: 이웃한 자료의 숫자끼리 겹치지 않도록 자료 쪽으로 치우친다
         const tt = 0.38;
         const midX = (1 - tt) * (1 - tt) * sx + 2 * tt * (1 - tt) * cxp + tt * tt * pivotX;
         const midY = (1 - tt) * (1 - tt) * sy + 2 * tt * (1 - tt) * cyp + tt * tt * ey;
@@ -906,7 +906,7 @@ function BarCompareOverlay({ L, values, p, nonce }: { L: Layout; values: number[
   const f = L.barFrac;
   const piece = (v: number, i: number): StripPiece => {
     const len = Math.abs(v - p);
-    const top = L.O0.y - Math.max(v, p) * L.U0; // 막대 위(넘친 칸) 또는 초록 선(모자란 칸)에서 시작하는 조각의 윗면
+    const top = L.O0.y - Math.max(v, p) * L.U0; // 막대 위(넘친 칸) 또는 기준선(모자란 칸)에서 시작하는 조각의 윗면
     return { i, len, from: { x: L.O0.x + (i + g) * L.S0, y: top, w: f * L.S0, h: len * L.U0 } };
   };
   const left = values.map((v, i) => ({ v, i })).filter((o) => o.v < p - 1e-9).map((o) => piece(o.v, o.i));
@@ -1004,7 +1004,7 @@ function AddBarSlot({ L, slot, empty, onPointerDown }: { L: Layout; slot: number
   );
 }
 
-// 새 자료 만들기: 각 눈금 위의 점선 추 (누르면 그 자리에 추가 놓임)
+// 새 자료 만들기: 각 눈금 위의 점선 자료 (누르면 그 자리에 자료가 놓임)
 function GhostWeights({ L, values, onAdd }: { L: Layout; values: number[]; onAdd: (v: number) => void }) {
   const counts = new Map<number, number>();
   values.forEach((v) => counts.set(v, (counts.get(v) ?? 0) + 1));

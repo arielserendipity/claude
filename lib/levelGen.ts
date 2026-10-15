@@ -1,18 +1,18 @@
 import { Block } from '../types';
 import { ITEM_COLORS } from './palette';
 
-// 활동 1: 이전 추는 그대로 두고 새 추를 더해, 평균(균형점)이 자연수(또는 0.5 단위)가 되게 만든다.
-// 새 추는 여러 자리에 고르게 놓는다. 예전에는 새 추가 한 곳에만 쌓였다:
-// 추 1개·자연수 정답 단계에서는 추가 5개쯤 쌓이면 정답을 자연수로 두는 자리가 지금 균형점뿐이라
-// 새 추가 매번 균형점 자리에 놓였고(정답도 그대로), 추 2개 단계에서는 균형점을 멀리 옮기려고 1이나 10에 쌓였다.
+// 활동 1: 이전 자료는 그대로 두고 새 자료를 더해, 평균(정답 자리)이 자연수(또는 0.5 단위)가 되게 만든다.
+// 새 자료는 여러 자리에 고르게 놓는다. 예전에는 새 자료가 한 곳에만 쌓였다:
+// 자료 1개·자연수 정답 단계에서는 자료가 5개쯤 쌓이면 정답을 자연수로 두는 자리가 지금 정답 자리뿐이라
+// 새 자료가 매번 정답 자리에 놓였고(정답도 그대로), 자료 2개 단계에서는 정답 자리를 멀리 옮기려고 1이나 10에 쌓였다.
 // - 한 단계에 정해진 개수(1개, 빨리 풀면 2개)만 놓는다. 그 개수로는 자연수·0.5 정답을 만들 수 없을 때만 더 놓는다.
-// - 균형점은 되도록 이전 정답과 다르게 한다. 자연수 정답 단계라도 정해진 개수로 자연수 정답을 바꿀 수 없으면
+// - 정답 자리는 되도록 이전 정답과 다르게 한다. 자연수 정답 단계라도 정해진 개수로 자연수 정답을 바꿀 수 없으면
 //   그 단계만 0.5 단위 정답을 허용한다.
-// - 균형점은 2~9 사이에 둔다(시소 끝에 붙지 않게).
-// - 한 자리에는 추를 3개까지만 쌓는다.
-// - 이미 추가 많은 자리, 새 추끼리 같은 자리, 시소 끝(1·10)은 피하고, 그중에서 무작위로 고른다.
-// - 그래도 받침점이 새 균형점과 너무 가까우면 활동 1이 받침점을 멀리 옮겨 놓고 시작한다(startFulcrum).
-// - 균형점이 양 끝 추의 한가운데나 가운데 추와 같아지는 문제는 덜 고른다(오개념과 구별되도록).
+// - 정답 자리는 2~9 사이에 둔다(시소 끝에 붙지 않게).
+// - 한 자리에는 자료를 3개까지만 쌓는다.
+// - 이미 자료가 많은 자리, 새 자료끼리 같은 자리, 시소 끝(1·10)은 피하고, 그중에서 무작위로 고른다.
+// - 그래도 받침점이 새 정답 자리와 너무 가까우면 활동 1이 받침점을 멀리 옮겨 놓고 시작한다(startFulcrum).
+// - 정답 자리가 양 끝 자료의 한가운데나 가운데 자료와 같아지는 문제는 덜 고른다(오개념과 구별되도록).
 
 const MIN_V = 1;
 const MAX_V = 10;
@@ -43,12 +43,12 @@ function shuffle<T>(xs: T[]): T[] {
 }
 
 interface Rules {
-  range: [number, number]; // 균형점이 놓일 범위
-  maxStack: number; // 한 자리에 쌓을 수 있는 추
+  range: [number, number]; // 정답 자리가 놓일 범위
+  maxStack: number; // 한 자리에 쌓을 수 있는 자료
 }
 
-// 새 문제의 받침점 시작 자리: 지금 받침점이 새 균형점에서 1칸 이상 떨어져 있으면 그대로 두고,
-// 너무 가까우면(그대로 맞아 버리면) 균형점에서 3칸 떨어진 쪽(가능하면 가운데 5.5)으로 옮긴다.
+// 새 문제의 받침점 시작 자리: 지금 받침점이 새 정답 자리에서 1칸 이상 떨어져 있으면 그대로 두고,
+// 너무 가까우면(그대로 맞아 버리면) 정답 자리에서 3칸 떨어진 쪽(가능하면 가운데 5.5)으로 옮긴다.
 export function startFulcrum(current: number, mean: number): number {
   if (Math.abs(current - mean) >= 1) return current;
   if (Math.abs(5.5 - mean) >= 1.5) return 5.5;
@@ -66,7 +66,7 @@ export function generateNewBlocks(currentBlocks: Block[], minBlocksToAdd: number
       isNew: true,
     }));
 
-  // 첫 문제: 서로 다른 위치의 추 2개, 평균은 가운데 쪽 자연수 (예: 3과 7 → 5)
+  // 첫 문제: 서로 다른 위치의 자료 2개, 평균은 가운데 쪽 자연수 (예: 3과 7 → 5)
   if (currentBlocks.length === 0 && minBlocksToAdd === 2) {
     const avg = 3 + Math.floor(Math.random() * 5); // 3~7
     const maxD = Math.min(avg - MIN_V, MAX_V - avg);
@@ -106,11 +106,11 @@ export function generateNewBlocks(currentBlocks: Block[], minBlocksToAdd: number
 
       // 점수: 낮을수록 좋음
       const all = [...positions, ...vals];
-      const crowd = vals.reduce((a, v) => a + (counts.get(v) ?? 0), 0); // 이미 추가 있는 자리
-      const dup = k - added.size; // 새 추끼리 같은 자리
+      const crowd = vals.reduce((a, v) => a + (counts.get(v) ?? 0), 0); // 이미 자료가 있는 자리
+      const dup = k - added.size; // 새 자료끼리 같은 자리
       const ends = vals.filter((v) => v === MIN_V || v === MAX_V).length; // 시소 끝
-      const same = move < 1e-9 ? 1 : 0; // 이전 정답과 같은 균형점
-      const farMove = Math.max(0, move - 3); // 너무 멀리 옮겨 가는 균형점
+      const same = move < 1e-9 ? 1 : 0; // 이전 정답과 같은 정답 자리
+      const farMove = Math.max(0, move - 3); // 너무 멀리 옮겨 가는 정답 자리
       const midrange = (Math.min(...all) + Math.max(...all)) / 2;
       const lookalike = (avg === midrange ? 1 : 0) + (avg === median(all) ? 0.5 : 0);
       scored.push({ vals, move, score: 1.2 * crowd + 2 * dup + 0.6 * ends + 6 * same + 0.8 * farMove + lookalike });
@@ -120,7 +120,7 @@ export function generateNewBlocks(currentBlocks: Block[], minBlocksToAdd: number
   const changes = (xs: Scored[]) => xs.some((x) => x.move > 1e-9);
 
   for (const rules of ladder) {
-    // 정해진 개수로는 균형점을 자연수(0.5)로 만들 수 없을 때만 더 놓는다
+    // 정해진 개수로는 정답 자리를 자연수(0.5)로 만들 수 없을 때만 더 놓는다
     for (let k = kMin; k <= MAX_ADD; k++) {
       let scored = scoreFor(k, rules, !forceInteger);
       if (forceInteger && !changes(scored)) {
