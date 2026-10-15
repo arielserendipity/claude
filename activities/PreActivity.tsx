@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, ChartColumn, Play, Repeat, RotateCcw, Trash2 } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { ArrowLeftRight, ChartColumn, PartyPopper, Play, Repeat, RotateCcw, Trash2 } from 'lucide-react';
 import { MAX_ITEMS, ModelStage, ViewMode } from '../components/ModelStage';
 import { SeesawIcon } from '../components/SeesawIcon';
 import { DEFAULT_VALUES, meanOf } from '../lib/questions';
@@ -135,6 +136,29 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
   };
   const importable = solvedProblems.filter((s) => s.values.length >= 2 && s.values.length <= MAX_ITEMS);
 
+  // ---------- 초록색이 평균에 맞으면 알려 준다 (사전 활동 2) ----------
+  // 처음부터 맞아 있는 상태에서는 알리지 않고, 학생이 초록색이나 자료를 움직여 새로 맞췄을 때만 알린다.
+  const meanOfCustom = meanOf(custom);
+  const matched = custom.length >= 2 && Number.isFinite(meanOfCustom) && Math.abs(p2 - meanOfCustom) < 1e-9;
+  const [cheer, setCheer] = useState(false);
+  const prevMatched = useRef(matched);
+  const quietUntil = useRef(0); // '처음 자료'로 되돌릴 때는 알리지 않는다
+  const lastConfetti = useRef(0);
+  useEffect(() => {
+    if (matched && !prevMatched.current && Date.now() > quietUntil.current) {
+      setCheer(true);
+      log('PRE_MEAN_MATCH', `초록색 ${fmt(p2)} = 자료의 평균 ${fmt(meanOfCustom)} (자료 [${custom.join(', ')}])`);
+      if (Date.now() - lastConfetti.current > 2000) {
+        lastConfetti.current = Date.now();
+        confetti({ particleCount: 70, spread: 70, startVelocity: 32, origin: { y: 0.45 } });
+      }
+    }
+    if (!matched) setCheer(false);
+    prevMatched.current = matched;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matched]);
+  const celebrating = cheer && item === 2 && matched;
+
   const segBtn = (active: boolean) =>
     `flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-korean transition-all ${
       active ? 'bg-white shadow text-indigo-700' : 'text-slate-500 hover:text-slate-700'
@@ -156,7 +180,11 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
   return (
     <div className="flex-1 min-h-0 w-full max-w-[1500px] mx-auto p-3 md:p-4 flex flex-col lg:flex-row lg:items-start gap-4 overflow-y-auto">
       {/* ---------- 그림 ---------- */}
-      <section className="sticky top-0 z-10 shrink-0 lg:flex-1 min-w-0 bg-white rounded-[2rem] shadow-xl border border-slate-200 flex flex-col overflow-hidden">
+      <section
+        className={`sticky top-0 z-10 shrink-0 lg:flex-1 min-w-0 bg-white rounded-[2rem] shadow-xl border flex flex-col overflow-hidden transition-all duration-500 ${
+          celebrating ? 'border-emerald-400 ring-4 ring-emerald-300' : 'border-slate-200'
+        }`}
+      >
         <div className="flex items-center gap-2 flex-wrap px-4 pt-4">
           <div className="flex bg-slate-100 rounded-2xl p-1">
             <button className={segBtn(view === 'side')} onClick={() => changeView('side')}>
@@ -197,6 +225,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
               ))}
               <button
                 onClick={() => {
+                  quietUntil.current = Date.now() + 500;
                   changeCustom([...DEFAULT_VALUES], '처음 자료로');
                   setP2(START_P);
                 }}
@@ -242,6 +271,13 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
         </div>
 
         <div className="relative w-full px-2 aspect-[1100/470]">
+          {celebrating && (
+            <div className="absolute top-1 inset-x-0 z-10 flex justify-center pointer-events-none">
+              <div role="status" className="pop flex items-center gap-2 rounded-full bg-emerald-500 text-white px-5 py-2 shadow-lg font-korean text-lg whitespace-nowrap">
+                <PartyPopper size={22} /> 평균이에요! 초록색이 평균 {fmt(meanOfCustom)}에 있어서 시소가 평평해요
+              </div>
+            </div>
+          )}
           <ModelStage
             values={values}
             p={p}
@@ -260,6 +296,7 @@ export function PreActivity({ addLog, solvedProblems }: PreActivityProps) {
             onRemoveValue={item === 2 ? removeValue : undefined}
             hint={null}
             lockP={item === 1}
+            celebrate={celebrating}
           />
         </div>
 
